@@ -596,7 +596,7 @@ function updateKubeResult() {
         <div class="pt-4 flex flex-row space-x-2 justify-end">
           <Button on:click="{() => goBackToHistory()}">Done</Button>
           <Button on:click="{() => openPodDetails()}" disabled="{!createdPod?.metadata?.name || !defaultContextName}"
-            >Open Pod Details</Button>
+            >Open Pod</Button>
         </div>
       {/if}
     </div>
