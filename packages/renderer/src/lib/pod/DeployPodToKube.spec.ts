@@ -344,21 +344,25 @@ test('Fail to deploy ingress if service is not selected', async () => {
 });
 
 test('Should display Open pod button after successful deployment', async () => {
-  kubernetesGetCurrentContextNameMock.mockResolvedValue('default');
+  await waitFor(() => kubernetesGetCurrentContextNameMock.mockResolvedValue('default'));
   await waitRender({});
   const createButton = screen.getByRole('button', { name: 'Deploy' });
   expect(createButton).toBeInTheDocument();
   expect(createButton).toBeEnabled();
 
-  kubernetesCreatePodMock.mockResolvedValue({
-    metadata: { name: 'hello', namespace: 'default' },
-  });
-  kubernetesReadNamespacedPodMock.mockResolvedValue({
-    metadata: { name: 'hello' },
-    status: {
-      phase: 'Running',
-    },
-  });
+  await waitFor(() =>
+    kubernetesCreatePodMock.mockResolvedValue({
+      metadata: { name: 'hello', namespace: 'default' },
+    }),
+  );
+  await waitFor(() =>
+    kubernetesReadNamespacedPodMock.mockResolvedValue({
+      metadata: { name: 'hello' },
+      status: {
+        phase: 'Running',
+      },
+    }),
+  );
 
   vi.useFakeTimers();
   await fireEvent.click(createButton);
