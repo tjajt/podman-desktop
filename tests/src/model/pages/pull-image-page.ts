@@ -15,7 +15,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
-import type { Locator, Page } from 'playwright';
+import type { Locator, Page } from '@playwright/test';
 import { BasePage } from './base-page';
 import { ImagesPage } from './images-page';
 
@@ -31,7 +31,7 @@ export class PullImagePage extends BasePage {
   constructor(page: Page) {
     super(page);
     this.heading = page.getByRole('heading', { name: 'Pull Image From a Registry' });
-    this.pullImageButton = page.getByRole('button', { name: 'Pull image' });
+    this.pullImageButton = page.getByRole('button', { name: 'Pull' });
     this.closeLink = page.getByRole('link', { name: 'Close' });
     this.backToImagesLink = page.getByRole('link', { name: 'Go back to Images' });
     this.manageRegistriesButton = page.getByRole('button', { name: 'Manage registries' });

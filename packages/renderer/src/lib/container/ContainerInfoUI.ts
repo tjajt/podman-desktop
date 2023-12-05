@@ -23,6 +23,8 @@ export enum ContainerGroupInfoTypeUI {
   STANDALONE = 'standalone',
   COMPOSE = 'compose',
   POD = 'pod',
+  DOCKER = 'docker',
+  PODMAN = 'podman',
 }
 
 export interface ContainerGroupPartInfoUI {
@@ -74,6 +76,9 @@ export interface ContainerGroupInfoUI extends ContainerGroupPartInfoUI {
   expanded: boolean;
 
   selected: boolean;
+
+  // can be different from containers.length when a filter is applied on containers
+  allContainersCount: number;
 
   // list of containers in this group
   containers: ContainerInfoUI[];

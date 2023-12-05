@@ -21,7 +21,8 @@ import * as path from 'path';
 import * as fs from 'fs';
 import type { CommandRegistry } from './command-registry.js';
 import type { ExtensionError, ExtensionInfo, ExtensionUpdateInfo } from './api/extension-info.js';
-import * as zipper from 'zip-local';
+import AdmZip from 'adm-zip';
+
 import type { TrayMenuRegistry } from './tray-menu-registry.js';
 import { Disposable } from './types/disposable.js';
 import type { ProviderRegistry } from './provider-registry.js';
@@ -68,6 +69,7 @@ import { ExtensionLoaderSettings } from './extension-loader-settings.js';
 import type { KubeGeneratorRegistry, KubernetesGeneratorProvider } from '/@/plugin/kube-generator-registry.js';
 import type { CliToolRegistry } from './cli-tool-registry.js';
 import type { NotificationRegistry } from './notification-registry.js';
+import type { ImageCheckerImpl } from './image-checker.js';
 
 /**
  * Handle the loading of an extension
@@ -92,6 +94,8 @@ export interface AnalyzedExtension {
 
   missingDependencies?: string[];
   circularDependencies?: string[];
+
+  error?: string;
 
   readonly subscriptions: { dispose(): unknown }[];
 
@@ -156,6 +160,7 @@ export class ExtensionLoader {
     private kubeGeneratorRegistry: KubeGeneratorRegistry,
     private cliToolRegistry: CliToolRegistry,
     private notificationRegistry: NotificationRegistry,
+    private imageCheckerProvider: ImageCheckerImpl,
   ) {
     this.pluginsDirectory = directories.getPluginsDirectory();
     this.pluginsScanDirectory = directories.getPluginsScanDirectory();
@@ -199,10 +204,11 @@ export class ExtensionLoader {
     const unpackedDirectory = path.resolve(dirname, `../unpacked/${filename}`);
     fs.mkdirSync(unpackedDirectory, { recursive: true });
     // extract to an existing directory
-    zipper.sync.unzip(filePath).save(unpackedDirectory);
+    const admZip = new AdmZip(filePath);
+    admZip.extractAllTo(unpackedDirectory, true);
 
     const extension = await this.analyzeExtension(unpackedDirectory, true);
-    if (extension) {
+    if (!extension.error) {
       await this.loadExtension(extension);
       this.apiSender.send('extension-started', {});
     }
@@ -293,12 +299,12 @@ export class ExtensionLoader {
 
     const analyzedFoldersExtension = (
       await Promise.all(folders.map(folder => this.analyzeExtension(folder, false)))
-    ).filter(extension => extension !== undefined) as AnalyzedExtension[];
+    ).filter(extension => !extension.error);
     analyzedExtensions.push(...analyzedFoldersExtension);
 
     const analyzedExternalExtensions = (
       await Promise.all(externalExtensions.map(folder => this.analyzeExtension(folder, false)))
-    ).filter(extension => extension !== undefined) as AnalyzedExtension[];
+    ).filter(extension => !extension.error);
     analyzedExtensions.push(...analyzedExternalExtensions);
 
     // also load extensions from the plugins directory
@@ -312,7 +318,7 @@ export class ExtensionLoader {
       // collect all extensions from the pluginDirectory folders
       const analyzedPluginsDirectoryExtensions: AnalyzedExtension[] = (
         await Promise.all(pluginDirectories.map(folder => this.analyzeExtension(folder, true)))
-      ).filter(extension => extension !== undefined) as AnalyzedExtension[];
+      ).filter(extension => !extension.error);
       analyzedExtensions.push(...analyzedPluginsDirectoryExtensions);
     }
 
@@ -320,14 +326,32 @@ export class ExtensionLoader {
     await this.loadExtensions(analyzedExtensions);
   }
 
-  async analyzeExtension(extensionPath: string, removable: boolean): Promise<AnalyzedExtension | undefined> {
+  async analyzeExtension(extensionPath: string, removable: boolean): Promise<AnalyzedExtension> {
     // do nothing if there is no package.json file
+    let error = undefined;
     if (!fs.existsSync(path.resolve(extensionPath, 'package.json'))) {
-      console.warn(`Ignoring extension ${extensionPath} without package.json file`);
-      return undefined;
+      error = `Ignoring extension ${extensionPath} without package.json file`;
+      console.warn(error);
+      const analyzedExtension: AnalyzedExtension = {
+        id: '<unknown>',
+        name: '<unknown>',
+        path: extensionPath,
+        manifest: undefined,
+        api: <typeof containerDesktopAPI>{},
+        removable,
+        subscriptions: [],
+        dispose(): void {},
+        error,
+      };
+      return analyzedExtension;
     }
 
+    // log error if the manifest is missing required entries
     const manifest = await this.loadManifest(extensionPath);
+    if (!manifest.name || !manifest.displayName || !manifest.version || !manifest.publisher || !manifest.description) {
+      error = `Extension ${extensionPath} missing required manifest entry in package.json (name, displayName, version, publisher, description)`;
+      console.warn(error);
+    }
 
     // create api object
     const api = this.createApi(extensionPath, manifest);
@@ -345,6 +369,7 @@ export class ExtensionLoader {
       dispose(): void {
         disposables.forEach(disposable => disposable.dispose());
       },
+      error,
     };
 
     return analyzedExtension;
@@ -508,7 +533,7 @@ export class ExtensionLoader {
     try {
       const updatedExtension = await this.analyzeExtension(extension.path, removable);
 
-      if (updatedExtension) {
+      if (!updatedExtension.error) {
         await this.loadExtension(updatedExtension, true);
       }
     } catch (error) {
@@ -921,6 +946,7 @@ export class ExtensionLoader {
       version: extManifest.version,
       publisher: extManifest.publisher,
       name: extManifest.name,
+      icon: extManifest.icon ? instance.updateImage(extManifest.icon, extensionPath) : undefined,
     };
     const authentication: typeof containerDesktopAPI.authentication = {
       getSession: (providerId, scopes, options) => {
@@ -1015,6 +1041,16 @@ export class ExtensionLoader {
       },
     };
 
+    const imageCheckerProvider = this.imageCheckerProvider;
+    const imageChecker: typeof containerDesktopAPI.imageChecker = {
+      registerImageCheckerProvider: (
+        provider: containerDesktopAPI.ImageCheckerProvider,
+        metadata?: containerDesktopAPI.ImageCheckerProviderMetadata,
+      ): containerDesktopAPI.Disposable => {
+        return imageCheckerProvider.registerImageCheckerProvider(extensionInfo, provider, metadata);
+      },
+    };
+
     return <typeof containerDesktopAPI>{
       // Types
       Disposable: Disposable,
@@ -1043,6 +1079,7 @@ export class ExtensionLoader {
       authentication,
       context: contextAPI,
       cli,
+      imageChecker,
     };
   }
 
@@ -1227,7 +1264,7 @@ export class ExtensionLoader {
     if (extension) {
       const analyzedExtension = await this.analyzeExtension(extension.path, extension.removable);
 
-      if (analyzedExtension) {
+      if (!analyzedExtension.error) {
         await this.loadExtension(analyzedExtension, true);
       }
     }

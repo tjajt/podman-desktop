@@ -1,15 +1,11 @@
 <script lang="ts">
 import './app.css';
-import '@patternfly/patternfly/patternfly.css';
-import '@patternfly/patternfly/patternfly-addons.css';
-import '@patternfly/patternfly/patternfly-theme-dark.css';
-import './override.css';
+import '@fortawesome/fontawesome-free/css/all.min.css';
 import { router } from 'tinro';
 
 import Route from './Route.svelte';
-import ContainerList from './lib/ContainerList.svelte';
-import ImagesList from './lib/ImagesList.svelte';
-import ProviderList from './lib/ProviderList.svelte';
+import ContainerList from './lib/container/ContainerList.svelte';
+import ImagesList from './lib/image/ImagesList.svelte';
 import PreferencesPage from './lib/preferences/PreferencesPage.svelte';
 import BuildImageFromContainerfile from './lib/image/BuildImageFromContainerfile.svelte';
 import PullImage from './lib/image/PullImage.svelte';
@@ -43,6 +39,7 @@ import CustomPick from './lib/dialogs/CustomPick.svelte';
 import ContextKey from './lib/context/ContextKey.svelte';
 import CreateVolume from './lib/volume/CreateVolume.svelte';
 import CommandPalette from './lib/dialogs/CommandPalette.svelte';
+import Appearance from './lib/appearance/Appearance.svelte';
 
 router.mode.hash();
 
@@ -68,6 +65,7 @@ window.events?.receive('display-troubleshooting', () => {
 <Route path="/*" breadcrumb="Home" let:meta>
   <main class="flex flex-col w-screen h-screen overflow-hidden bg-charcoal-800">
     <IconsStyle />
+    <Appearance />
     <TitleBar />
     <ContextKey />
 
@@ -142,7 +140,7 @@ window.events?.receive('display-troubleshooting', () => {
             engineId="{decodeURI(meta.params.engineId)}"
             type="compose" />
         </Route>
-        <Route path="/compose/:name/:engineId/*" breadcrumb="Compose Details" let:meta navigationHint="details">
+        <Route path="/compose/details/:name/:engineId/*" breadcrumb="Compose Details" let:meta navigationHint="details">
           <ComposeDetails composeName="{decodeURI(meta.params.name)}" engineId="{decodeURI(meta.params.engineId)}" />
         </Route>
         <Route path="/pods/:kind/:name/:engineId/*" breadcrumb="Pod Details" let:meta navigationHint="details">
@@ -162,9 +160,6 @@ window.events?.receive('display-troubleshooting', () => {
         </Route>
         <Route path="/volumes/:name/:engineId/*" breadcrumb="Volume Details" let:meta navigationHint="details">
           <VolumeDetails volumeName="{decodeURI(meta.params.name)}" engineId="{decodeURI(meta.params.engineId)}" />
-        </Route>
-        <Route path="/providers" breadcrumb="Providers">
-          <ProviderList />
         </Route>
         <Route path="/preferences/*" breadcrumb="Settings">
           <PreferencesPage />

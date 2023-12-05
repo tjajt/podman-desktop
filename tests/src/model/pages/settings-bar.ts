@@ -16,7 +16,7 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
-import type { Locator, Page } from 'playwright';
+import type { Locator, Page } from '@playwright/test';
 import type { SettingsPage } from './settings-page';
 
 export class SettingsBar {
@@ -37,14 +37,18 @@ export class SettingsBar {
     this.proxyTab = this.settingsNavBar.getByRole('link', { name: 'Proxy' });
     this.registriesTab = this.settingsNavBar.getByRole('link', { name: 'Registries' });
     this.authenticationTab = this.settingsNavBar.getByRole('link', { name: 'Authentication' });
-    this.extensionsTab = this.settingsNavBar.getByRole('link', { name: 'Extensions' });
+    this.extensionsTab = this.settingsNavBar.getByRole('link', { name: 'Extensions', exact: true });
     this.desktopExtensionsTab = this.settingsNavBar.getByRole('link', { name: 'DesktopExtensions' });
     this.preferencesTab = this.settingsNavBar.getByRole('link', { name: 'preferences' });
   }
 
-  async openTabPage<T extends SettingsPage>(type: new (page: Page) => T): Promise<T> {
+  public async openTabPage<T extends SettingsPage>(type: new (page: Page) => T): Promise<T> {
     const desiredPage = new type(this.page);
     await (await desiredPage.getTab()).click();
     return desiredPage;
+  }
+
+  public getSettingsNavBarTabLocator(name: string): Locator {
+    return this.settingsNavBar.getByLabel(name);
   }
 }

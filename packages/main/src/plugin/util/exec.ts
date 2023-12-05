@@ -65,9 +65,6 @@ export class Exec {
 
     if (isMac() || isWindows()) {
       env.PATH = getInstallationPath(env.PATH);
-    } else if (env.FLATPAK_ID) {
-      args = ['--host', command, ...(args || [])];
-      command = 'flatpak-spawn';
     }
 
     // do we have an admin task ?
@@ -137,6 +134,11 @@ export class Exec {
       }
     }
 
+    if (env.FLATPAK_ID) {
+      args = ['--host', command, ...(args || [])];
+      command = 'flatpak-spawn';
+    }
+
     let cwd: string;
     if (options?.cwd) {
       cwd = options.cwd;
@@ -178,8 +180,8 @@ export class Exec {
         reject(errResult);
       });
 
-      childProcess.stdout.setEncoding('utf8');
-      childProcess.stderr.setEncoding('utf8');
+      childProcess.stdout.setEncoding(options?.encoding ?? 'utf8');
+      childProcess.stderr.setEncoding(options?.encoding ?? 'utf8');
 
       childProcess.stdout.on('data', data => {
         stdout += data.toString();

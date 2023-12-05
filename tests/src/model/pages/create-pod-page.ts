@@ -16,7 +16,7 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
-import type { Locator, Page } from 'playwright';
+import type { Locator, Page } from '@playwright/test';
 import { BasePage } from './base-page';
 import { PodsPage } from './pods-page';
 import { waitWhile } from '../../utility/wait';
@@ -41,7 +41,7 @@ export class CreatePodsPage extends BasePage {
     await this.podNameBox.fill(podName);
     await this.createPodButton.click();
     try {
-      await waitWhile(async () => await this.createPodButton.isVisible(), 10000, 700);
+      await waitWhile(async () => await this.createPodButton.isVisible(), 20000, 700);
     } catch (err) {
       const errLocator = this.page.getByRole('alert', { name: 'Error Message Content' });
       await errLocator.waitFor({ state: 'visible', timeout: 5000 });

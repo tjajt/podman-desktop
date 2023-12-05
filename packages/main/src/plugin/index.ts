@@ -52,7 +52,7 @@ import type { PullEvent } from './api/pull-event.js';
 import type { ExtensionInfo } from './api/extension-info.js';
 import type { ImageInspectInfo } from './api/image-inspect-info.js';
 import type { TrayMenu } from '../tray-menu.js';
-import { getFreePort, getFreePortRange } from './util/port.js';
+import { getFreePort, getFreePortRange, isFreePort } from './util/port.js';
 import { isLinux, isMac } from '../util.js';
 import type { MessageBoxOptions, MessageBoxReturnValue } from './message-box.js';
 import { MessageBox } from './message-box.js';
@@ -80,7 +80,17 @@ import { AutostartEngine } from './autostart-engine.js';
 import { CloseBehavior } from './close-behavior.js';
 import { TrayIconColor } from './tray-icon-color.js';
 import { KubernetesClient } from './kubernetes-client.js';
-import type { V1Pod, V1ConfigMap, V1NamespaceList, V1PodList, V1Service, V1Ingress } from '@kubernetes/client-node';
+import type {
+  V1Pod,
+  V1ConfigMap,
+  V1NamespaceList,
+  V1PodList,
+  V1Service,
+  V1Ingress,
+  Context as KubernetesContext,
+  Cluster,
+  V1Deployment,
+} from '@kubernetes/client-node';
 import type { V1Route } from './api/openshift-types.js';
 import type { NetworkInspectInfo } from './api/network-info.js';
 import { FilesystemMonitoring } from './filesystem-monitoring.js';
@@ -132,6 +142,10 @@ import { CliToolRegistry } from './cli-tool-registry.js';
 import type { CliToolInfo } from './api/cli-tool-info.js';
 import type { NotificationCard, NotificationCardOptions } from './api/notification.js';
 import { NotificationRegistry } from './notification-registry.js';
+import { ImageCheckerImpl } from './image-checker.js';
+import type { ImageCheckerInfo } from './api/image-checker-info.js';
+import { AppearanceInit } from './appearance-init.js';
+import type { KubeContext } from './kubernetes-context.js';
 
 type LogType = 'log' | 'warn' | 'trace' | 'debug' | 'error';
 
@@ -383,6 +397,8 @@ export class PluginSystem {
 
     const exec = new Exec(proxy);
 
+    const taskManager = new TaskManager(apiSender);
+
     const commandRegistry = new CommandRegistry(apiSender, telemetry);
     const menuRegistry = new MenuRegistry(commandRegistry);
     const kubeGeneratorRegistry = new KubeGeneratorRegistry();
@@ -400,7 +416,7 @@ export class PluginSystem {
     const fileSystemMonitoring = new FilesystemMonitoring();
     const customPickRegistry = new CustomPickRegistry(apiSender);
     const onboardingRegistry = new OnboardingRegistry(configurationRegistry, context);
-    const notificationRegistry = new NotificationRegistry(apiSender);
+    const notificationRegistry = new NotificationRegistry(apiSender, taskManager);
     const kubernetesClient = new KubernetesClient(apiSender, configurationRegistry, fileSystemMonitoring, telemetry);
     await kubernetesClient.init();
     const closeBehaviorConfiguration = new CloseBehavior(configurationRegistry);
@@ -679,6 +695,10 @@ export class PluginSystem {
       apiSender.send('display-troubleshooting', '');
     });
 
+    // register appearance (light, dark, auto being system)
+    const appearanceConfiguration = new AppearanceInit(configurationRegistry);
+    appearanceConfiguration.init();
+
     const terminalInit = new TerminalInit(configurationRegistry);
     terminalInit.init();
 
@@ -694,9 +714,9 @@ export class PluginSystem {
 
     const authentication = new AuthenticationImpl(apiSender);
 
-    const taskManager = new TaskManager(apiSender);
-
     const cliToolRegistry = new CliToolRegistry(apiSender, exec, telemetry);
+
+    const imageChecker = new ImageCheckerImpl(apiSender);
 
     this.extensionLoader = new ExtensionLoader(
       commandRegistry,
@@ -726,6 +746,7 @@ export class PluginSystem {
       kubeGeneratorRegistry,
       cliToolRegistry,
       notificationRegistry,
+      imageChecker,
     );
     await this.extensionLoader.init();
 
@@ -1160,7 +1181,13 @@ export class PluginSystem {
         imageName: string,
         selectedProvider: ProviderContainerConnectionInfo,
         onDataCallbacksBuildImageId: number,
+        cancellableTokenId?: number,
       ): Promise<unknown> => {
+        const abortController = this.createAbortControllerOnCancellationToken(
+          cancellationTokenRegistry,
+          cancellableTokenId,
+        );
+
         return containerProviderRegistry.buildImage(
           containerBuildContextDirectory,
           relativeContainerfilePath,
@@ -1174,6 +1201,7 @@ export class PluginSystem {
               data,
             );
           },
+          abortController,
         );
       },
     );
@@ -1201,6 +1229,21 @@ export class PluginSystem {
     this.ipcHandle('cli-tool-registry:getCliToolInfos', async (): Promise<CliToolInfo[]> => {
       return cliToolRegistry.getCliToolInfos();
     });
+
+    this.ipcHandle(
+      'cli-tool-registry:updateCliTool',
+      async (_listener, id: string, loggerId: string): Promise<void> => {
+        const logger = this.getLogHandler('provider-registry:updateCliTool-onData', loggerId);
+        try {
+          await cliToolRegistry.updateCliTool(id, logger);
+        } catch (error) {
+          logger.error(error);
+          throw error;
+        } finally {
+          logger.onEnd();
+        }
+      },
+    );
 
     this.ipcHandle('menu-registry:getContributedMenus', async (_, context: string): Promise<Menu[]> => {
       return menuRegistry.getContributedMenus(context);
@@ -1308,6 +1351,10 @@ export class PluginSystem {
 
     this.ipcHandle('system:get-free-port-range', async (_, rangeSize: number): Promise<string> => {
       return getFreePortRange(rangeSize);
+    });
+
+    this.ipcHandle('system:is-port-free', async (_, port: number): Promise<boolean> => {
+      return isFreePort(port);
     });
 
     this.ipcHandle(
@@ -1638,7 +1685,7 @@ export class PluginSystem {
         providerConnectionInfo: ProviderContainerConnectionInfo | ProviderKubernetesConnectionInfo,
         loggerId: string,
       ): Promise<void> => {
-        const logger = this.getLogHandlerCreateConnection('provider-registry:taskConnection-onData', loggerId);
+        const logger = this.getLogHandler('provider-registry:taskConnection-onData', loggerId);
         await providerRegistry.startProviderConnection(providerId, providerConnectionInfo, logger);
         logger.onEnd();
       },
@@ -1652,7 +1699,7 @@ export class PluginSystem {
         providerConnectionInfo: ProviderContainerConnectionInfo | ProviderKubernetesConnectionInfo,
         loggerId: string,
       ): Promise<void> => {
-        const logger = this.getLogHandlerCreateConnection('provider-registry:taskConnection-onData', loggerId);
+        const logger = this.getLogHandler('provider-registry:taskConnection-onData', loggerId);
         await providerRegistry.stopProviderConnection(providerId, providerConnectionInfo, logger);
         logger.onEnd();
       },
@@ -1666,7 +1713,7 @@ export class PluginSystem {
         providerConnectionInfo: ProviderContainerConnectionInfo | ProviderKubernetesConnectionInfo,
         loggerId: string,
       ): Promise<void> => {
-        const logger = this.getLogHandlerCreateConnection('provider-registry:taskConnection-onData', loggerId);
+        const logger = this.getLogHandler('provider-registry:taskConnection-onData', loggerId);
         await providerRegistry.deleteProviderConnection(providerId, providerConnectionInfo, logger);
         logger.onEnd();
       },
@@ -1681,7 +1728,7 @@ export class PluginSystem {
         loggerId: string,
         tokenId?: number,
       ): Promise<void> => {
-        const logger = this.getLogHandlerCreateConnection('provider-registry:taskConnection-onData', loggerId);
+        const logger = this.getLogHandler('provider-registry:taskConnection-onData', loggerId);
         let token;
         if (tokenId) {
           const tokenSource = cancellationTokenRegistry.getCancellationTokenSource(tokenId);
@@ -1718,7 +1765,7 @@ export class PluginSystem {
         loggerId: string,
         tokenId?: number,
       ): Promise<void> => {
-        const logger = this.getLogHandlerCreateConnection('provider-registry:taskConnection-onData', loggerId);
+        const logger = this.getLogHandler('provider-registry:taskConnection-onData', loggerId);
         let token;
         if (tokenId) {
           const tokenSource = cancellationTokenRegistry.getCancellationTokenSource(tokenId);
@@ -1757,6 +1804,22 @@ export class PluginSystem {
       return kubernetesClient.listPods();
     });
 
+    this.ipcHandle('kubernetes-client:listDeployments', async (): Promise<V1Deployment[]> => {
+      return kubernetesClient.listDeployments();
+    });
+
+    this.ipcHandle('kubernetes-client:listIngresses', async (): Promise<V1Ingress[]> => {
+      return kubernetesClient.listIngresses();
+    });
+
+    this.ipcHandle('kubernetes-client:listRoutes', async (): Promise<V1Route[]> => {
+      return kubernetesClient.listRoutes();
+    });
+
+    this.ipcHandle('kubernetes-client:listServices', async (): Promise<V1Service[]> => {
+      return kubernetesClient.listServices();
+    });
+
     this.ipcHandle(
       'kubernetes-client:readPodLog',
       async (_listener, name: string, container: string, onDataId: number): Promise<void> => {
@@ -1768,6 +1831,22 @@ export class PluginSystem {
 
     this.ipcHandle('kubernetes-client:deletePod', async (_listener, name: string): Promise<void> => {
       return kubernetesClient.deletePod(name);
+    });
+
+    this.ipcHandle('kubernetes-client:deleteDeployment', async (_listener, name: string): Promise<void> => {
+      return kubernetesClient.deleteDeployment(name);
+    });
+
+    this.ipcHandle('kubernetes-client:deleteIngress', async (_listener, name: string): Promise<void> => {
+      return kubernetesClient.deleteIngress(name);
+    });
+
+    this.ipcHandle('kubernetes-client:deleteRoute', async (_listener, name: string): Promise<void> => {
+      return kubernetesClient.deleteRoute(name);
+    });
+
+    this.ipcHandle('kubernetes-client:deleteService', async (_listener, name: string): Promise<void> => {
+      return kubernetesClient.deleteService(name);
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1818,8 +1897,31 @@ export class PluginSystem {
       return kubernetesClient.getCurrentContextName();
     });
 
+    this.ipcHandle('kubernetes-client:getContexts', async (): Promise<KubernetesContext[]> => {
+      return kubernetesClient.getContexts();
+    });
+
+    this.ipcHandle('kubernetes-client:getDetailedContexts', async (): Promise<KubeContext[]> => {
+      return kubernetesClient.getDetailedContexts();
+    });
+
+    this.ipcHandle('kubernetes-client:getClusters', async (): Promise<Cluster[]> => {
+      return kubernetesClient.getClusters();
+    });
+
     this.ipcHandle('kubernetes-client:getCurrentNamespace', async (): Promise<string | undefined> => {
       return kubernetesClient.getCurrentNamespace();
+    });
+
+    this.ipcHandle(
+      'kubernetes-client:deleteContext',
+      async (_listener, contextName: string): Promise<KubernetesContext[]> => {
+        return kubernetesClient.deleteContext(contextName);
+      },
+    );
+
+    this.ipcHandle('kubernetes-client:setContext', async (_listener, contextName: string): Promise<void> => {
+      return kubernetesClient.setContext(contextName);
     });
 
     this.ipcHandle('feedback:send', async (_listener, feedbackProperties: unknown): Promise<void> => {
@@ -1935,6 +2037,27 @@ export class PluginSystem {
       return notificationRegistry.removeAll();
     });
 
+    this.ipcHandle('image-checker:getProviders', async (): Promise<ImageCheckerInfo[]> => {
+      return imageChecker.getImageCheckerProviders();
+    });
+
+    this.ipcHandle(
+      'image-checker:check',
+      async (
+        _listener,
+        id: string,
+        image: ImageInfo,
+        tokenId?: number,
+      ): Promise<containerDesktopAPI.ImageChecks | undefined> => {
+        let token;
+        if (tokenId) {
+          const tokenSource = cancellationTokenRegistry.getCancellationTokenSource(tokenId);
+          token = tokenSource?.token;
+        }
+        return imageChecker.check(id, image, token);
+      },
+    );
+
     const dockerDesktopInstallation = new DockerDesktopInstallation(
       apiSender,
       containerProviderRegistry,
@@ -1990,7 +2113,7 @@ export class PluginSystem {
     this.isReady = true;
   }
 
-  getLogHandlerCreateConnection(channel: string, loggerId: string): LoggerWithEnd {
+  getLogHandler(channel: string, loggerId: string): LoggerWithEnd {
     return {
       log: (...data: unknown[]) => {
         this.getWebContentsSender().send(channel, loggerId, 'log', data);
@@ -2005,5 +2128,22 @@ export class PluginSystem {
         this.getWebContentsSender().send(channel, loggerId, 'finish');
       },
     };
+  }
+
+  createAbortControllerOnCancellationToken(
+    cancellationTokenRegistry: CancellationTokenRegistry,
+    cancellableTokenId?: number,
+  ): AbortController | undefined {
+    if (!cancellableTokenId) {
+      return undefined;
+    }
+    const abortController = new AbortController();
+    const tokenSource = cancellationTokenRegistry.getCancellationTokenSource(cancellableTokenId);
+    const token = tokenSource?.token;
+    token?.onCancellationRequested(() => {
+      // if the token is cancelled, we trigger the abort on the AbortController
+      abortController.abort();
+    });
+    return abortController;
   }
 }

@@ -17,7 +17,7 @@ The challenges are to run a desktop tool (Podman Desktop) and running a containe
 
 ## Defining image of the container
 
-The first thing is in the choice of the image for the container. It is possible to pick-up a default image and add some features but there is no existing feature for Podman at <https://github.com/devcontainers/features/tree/main/src> and most of the features are expecting to run on top of Debian/Ubuntu
+The first thing is in the choice of the image for the container. It is possible to pick-up a default image and add some features but there is no existing feature for Podman at https://github.com/devcontainers/features/tree/main/src and most of the features are expecting to run on top of Debian/Ubuntu
 
 If you are not interested in how to setup the image, jump to the [next section](#configure-the-devcontainer-using-devcontainerjson).
 
@@ -126,7 +126,7 @@ ENV XDG_RUNTIME_DIR=/run/user/1000
 
 OK ! we have a custom Containerfile providing all the tools to build and run Podman Desktop (using VNC for the display), run Podman and run Electron.
 
-The current file is available at <https://github.com/containers/podman-desktop/blob/main/.devcontainer/.parent/Containerfile>
+The current file is available at https://github.com/containers/podman-desktop/blob/main/.devcontainer/.parent/Containerfile
 
 Let's configure the DevContainer.
 
@@ -250,7 +250,7 @@ It starts VNC and noVNC, start precompiled Podman Desktop and start the document
 
 It is not launching the Watch mode/development mode of Podman Desktop as it requires a container having more than 8GB of memory.
 
-Picking up a larger instace with for example 16GB, it's possible to use development mode.
+Picking up a larger instance with for example 16GB, it's possible to use development mode.
 
 Of course, to make VNC happy, we need to specify the `DISPLAY` environment variable.
 
@@ -282,13 +282,13 @@ After all post-creation steps, the `Preview` browser inside the VS Code editor w
 
 As a user, opening a workspace with all what we configured is done using a single click.
 
-Go to <https://github.com/containers/podman-desktop> then click on the `< > Code` dropdown and click on `Create codespace on main` button.
+Go to https://github.com/containers/podman-desktop then click on the `< > Code` dropdown and click on `Create codespace on main` button.
 
 ![Open Codespace](img/develop-podman-using-codespaces/codespaces-click-repository.png)
 
 Once you click on the button, the codespace is setting up:
 
-![Preparing Codepace](img/develop-podman-using-codespaces/codespaces-preparing-codespace.png)
+![Preparing Codespace](img/develop-podman-using-codespaces/codespaces-preparing-codespace.png)
 
 After few minutes, as there is not yet [prebuilt codespaces](https://docs.github.com/en/codespaces/prebuilding-your-codespaces/about-github-codespaces-prebuilds), the codespace is opening.
 

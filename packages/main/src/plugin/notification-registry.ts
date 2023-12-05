@@ -22,12 +22,16 @@ import { Notification } from 'electron';
 import type { ApiSenderType } from './api.js';
 import { Disposable } from './types/disposable.js';
 import type * as containerDesktopAPI from '@podman-desktop/api';
+import type { TaskManager } from './task-manager.js';
 
 export class NotificationRegistry {
   private notificationId = 0;
   private notificationQueue: NotificationCard[] = [];
 
-  constructor(private apiSender: ApiSenderType) {}
+  constructor(
+    private apiSender: ApiSenderType,
+    private taskManager: TaskManager,
+  ) {}
 
   registerExtension(extensionId: string): Disposable {
     return Disposable.create(() => {
@@ -41,10 +45,21 @@ export class NotificationRegistry {
       ...notificationInfo,
       id: this.notificationId,
     };
+    // if there is the same notification already in the queue we remove it and put it at the head of the queue
+    this.notificationQueue = this.notificationQueue.filter(
+      notification =>
+        notification.extensionId !== notificationInfo.extensionId || notification.title !== notificationInfo.title,
+    );
     // we add the new notification to the beginning of the queue to display the queue head in the dashboard
     this.notificationQueue.unshift(notification);
     // send event
     this.apiSender.send('notifications-updated');
+    // create task
+    this.taskManager.createNotificationTask({
+      title: notification.title,
+      body: notification.body,
+      markdownActions: notification.markdownActions,
+    });
     // we show the notification
     const disposeShowNotification = this.showNotification({
       title: notification.title,
@@ -78,7 +93,7 @@ export class NotificationRegistry {
 
   removeNotificationsByExtensionAndTitle(extensionId: string, title: string): void {
     this.notificationQueue = this.notificationQueue.filter(
-      notification => notification.extensionId !== extensionId && notification.title !== title,
+      notification => notification.extensionId !== extensionId || notification.title !== title,
     );
     // send event
     this.apiSender.send('notifications-updated');

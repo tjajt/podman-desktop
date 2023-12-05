@@ -16,7 +16,7 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
-import type { Locator, Page } from 'playwright';
+import type { Locator, Page } from '@playwright/test';
 import { MainPage } from './main-page';
 import { ImageDetailsPage } from './image-details-page';
 import { PullImagePage } from './pull-image-page';
@@ -29,9 +29,9 @@ export class ImagesPage extends MainPage {
 
   constructor(page: Page) {
     super(page, 'images');
-    this.pullImageButton = this.additionalActions.getByRole('button', { name: 'Pull an image' });
-    this.pruneImagesButton = this.additionalActions.getByRole('button', { name: 'Prune images' });
-    this.buildImageButton = this.additionalActions.getByRole('button', { name: 'Build an image' });
+    this.pullImageButton = this.additionalActions.getByRole('button', { name: 'Pull' });
+    this.pruneImagesButton = this.additionalActions.getByRole('button', { name: 'Prune' });
+    this.buildImageButton = this.additionalActions.getByRole('button', { name: 'Build' });
   }
 
   async openPullImage(): Promise<PullImagePage> {
@@ -58,7 +58,13 @@ export class ImagesPage extends MainPage {
     }
     const table = await this.getTable();
     const rows = await table.getByRole('row').all();
+    let first: boolean = true;
     for (const row of rows) {
+      if (first) {
+        // skip first row (header)
+        first = false;
+        continue;
+      }
       // test on empty row - contains on 0th position &nbsp; character (ISO 8859-1 character set: 160)
       const zeroCell = await row.getByRole('cell').nth(0).innerText();
       if (zeroCell.indexOf(String.fromCharCode(160)) === 0) {

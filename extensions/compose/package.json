@@ -21,12 +21,12 @@
         "title": "Compose: Checks..."
       },
       {
-        "command": "compose.onboarding.checkComposeInstalled",
-        "title": "Compose: Check Compose installation"
+        "command": "compose.onboarding.checkDownloadedCommand",
+        "title": "Compose: Check Compose Downloaded"
       },
       {
-        "command": "compose.onboarding.installCompose",
-        "title": "Compose: Install Compose"
+        "command": "compose.onboarding.downloadCommand",
+        "title": "Compose: Download Compose"
       }
     ],
     "onboarding": {
@@ -34,19 +34,19 @@
       "enablement": "!compose.isComposeInstalledSystemWide",
       "steps": [
         {
-          "id": "checkComposeInstalled",
+          "id": "checkDownloadedCommand",
           "label": "Check Compose",
           "title": "Checking for Compose installation",
-          "command": "compose.onboarding.checkComposeInstalled",
+          "command": "compose.onboarding.checkDownloadedCommand",
           "completionEvents": [
-            "onCommand:compose.onboarding.checkComposeInstalled"
+            "onCommand:compose.onboarding.checkDownloadedCommand"
           ]
         },
         {
-          "id": "startComposeInstallation",
-          "label": "Compose Installation",
-          "title": "Compose Installation",
-          "when": "onboardingContext:composeIsNotInstalled == true",
+          "id": "welcomeDownloadView",
+          "label": "Compose Download",
+          "title": "Compose Download",
+          "when": "onboardingContext:composeIsNotDownloaded == true",
           "content": [
             [
               {
@@ -55,55 +55,77 @@
             ],
             [
               {
-                "value": "#### How to use Compose\nRun `podman compose up` (podman CLI v4.7.0+) in a directory with a `compose.yaml` for Podman to deploy the containers. Podman Desktop will automatically detect the Compose deployment and show it in the container list. \n\n> ℹ️ Note: If you would like to use docker tools such as: `docker compose up` or `docker-compose` with podman. Enable **Docker Compatibility** within Preferences.",
+                "value": "> ℹ️ Note: Want to use docker CLI tools such as: `docker compose up` or `docker-compose` with podman? Enable **Docker Compatibility** within Preferences.",
                 "highlight": true
               }
             ],
             [
               {
-                "value": "Compose will be installed in the next step (Version ${onboardingContext:composeInstallVersion}). :link[Want to install a different version?]{command=compose.onboarding.promptUserForVersion}",
-                "when": "!onboardingContext:composeShowCustomInstallDialog"
+                "value": "Compose will be downloaded in the next step (Version ${onboardingContext:composeDownloadVersion}). :link[Want to download a different version?]{command=compose.onboarding.promptUserForVersion}",
+                "when": "!onboardingContext:composeShowCustomDownloadDialog"
               }
             ]
           ]
         },
         {
-          "id": "installComposeView",
-          "title": "Installing Compose ${onboardingContext:composeInstallVersion}",
-          "description": "Downloading and installing the binary.\n\nOnce installed, we will enable and configure the extension.",
-          "when": "onboardingContext:composeIsNotInstalled == true",
-          "command": "compose.onboarding.installCompose",
+          "id": "downloadCommand",
+          "title": "Downloading Compose ${onboardingContext:composeDownloadVersion}",
+          "description": "Downloading the binary.\n\nOnce downloaded, the next step will install Compose system-wide.",
+          "when": "onboardingContext:composeIsNotDownloaded == true",
+          "command": "compose.onboarding.downloadCommand",
           "completionEvents": [
-            "onCommand:compose.onboarding.installCompose"
+            "onCommand:compose.onboarding.downloadCommand"
           ]
         },
         {
-          "id": "composeFailedInstallation",
-          "title": "Failed installing Compose",
-          "when": "onboardingContext:composeIsNotInstalled == true",
+          "id": "downloadFailure",
+          "title": "Failed Downloading Compose",
+          "when": "onboardingContext:composeIsNotDownloaded == true",
           "state": "failed"
         },
         {
-          "id": "composeInstalled",
-          "title": "Compose successfully installed",
-          "when": "onboardingContext:composeIsNotInstalled == false",
-          "state": "succeeded",
+          "id": "downloadSuccessfulView",
+          "title": "Compose Successfully Downloaded",
+          "when": "onboardingContext:composeIsNotDownloaded == false",
           "content": [
             [
               {
-                "value": "Compose has been successfully installed! However, in order for `podman compose` (podman CLI v4.7.0+) to work correctly, it is required for Compose to be installed system-wide for `podman` to access the binary.",
-                "when": "!compose.isComposeInstalledSystemWide"
+                "value": "Compose has been successfully downloaded! In order for `podman compose` (podman CLI v4.7.0+) to work correctly, it is required for Compose to be installed system-wide for `podman` to access the binary.\n\nThe next step will install Compose system-wide. **You will be prompted for system privileges when enabling this.**"
+              }
+            ]
+          ]
+        },
+        {
+          "id": "installSystemWideCommand",
+          "title": "Install Compose",
+          "description": "Installing the binary system-wide.\n\n You may be prompted for elevated system privileges.",
+          "when": "compose.isComposeInstalledSystemWide == false",
+          "command": "compose.onboarding.installSystemWideCommand",
+          "completionEvents": [
+            "onCommand:compose.onboarding.installSystemWideCommand"
+          ]
+        },
+        {
+          "id": "installSystemWideFailure",
+          "title": "Failed Installing Compose",
+          "when": "compose.isComposeInstalledSystemWide == false",
+          "state": "failed"
+        },
+        {
+          "id": "installSystemWideSuccess",
+          "title": "Compose Successfully Installed",
+          "when": "compose.isComposeInstalledSystemWide == true",
+          "state": "completed",
+          "content": [
+            [
+              {
+                "value": "Compose has been successfully installed system-wide!"
               }
             ],
             [
               {
-                "value": "${configuration:compose.binary.installComposeSystemWide}",
-                "when": "!compose.isComposeInstalledSystemWide"
-              }
-            ],
-            [
-              {
-                "value": "> ℹ️ Note on `docker`: If you are using docker CLI tools with a podman back-end you must enable **Docker Compatibility** within **Preferences -> Extension: Podman** or set the [DOCKER_HOST](https://podman-desktop.io/docs/migrating-from-docker/using-the-docker_host-environment-variable) environment variable before running `docker compose up` or `docker-compose up`."
+                "value": "#### How to use Compose\nRun `podman compose up` (podman CLI v4.7.0+) or `docker-compose` in a directory with a `compose.yaml`. Podman Desktop will automatically detect the Compose deployment and show it in the container list.'\n\n`$ podman compose up`",
+                "highlight": true
               }
             ]
           ]
@@ -116,9 +138,12 @@
         "compose.binary.installComposeSystemWide": {
           "type": "boolean",
           "default": false,
-          "scope": ["DEFAULT", "Onboarding"],
+          "scope": [
+            "DEFAULT",
+            "Onboarding"
+          ],
           "hidden": true,
-          "description": "Install system-wide instead of just your user directory, so compose can be accessed on the command line. Note: You will be prompted for system privileges when enabling this. "
+          "description": "Install system-wide instead of just your user directory, so compose can be accessed on the command line. Note: You may be prompted for elevated system privileges when enabling this."
         }
       }
     }
@@ -135,11 +160,10 @@
     "shell-path": "^3.0.0"
   },
   "devDependencies": {
-    "7zip-min": "^1.4.3",
+    "adm-zip": "^0.5.10",
     "@podman-desktop/api": "^0.0.1",
     "mkdirp": "^3.0.1",
-    "vite": "^4.5.0",
-    "vitest": "^0.34.6",
-    "zip-local": "^0.3.5"
+    "vite": "^5.0.5",
+    "vitest": "^0.34.6"
   }
 }

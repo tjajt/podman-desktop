@@ -90,6 +90,9 @@ export class ContainerProviderRegistry {
   private readonly _onEvent = new Emitter<JSONEvent>();
   readonly onEvent: Event<JSONEvent> = this._onEvent.event;
 
+  // delay in ms before retrying to connect to the provider when /events connection fails
+  protected retryDelayEvents: number = 5000;
+
   private envfileParser = new EnvfileParser();
 
   constructor(
@@ -111,10 +114,13 @@ export class ContainerProviderRegistry {
   protected streamsPerContainerId: Map<string, NodeJS.ReadWriteStream> = new Map();
   protected streamsOutputPerContainerId: Map<string, Buffer[]> = new Map();
 
-  handleEvents(api: Dockerode) {
+  handleEvents(api: Dockerode, errorCallback: (error: Error) => void) {
+    let nbEvents = 0;
+    const startDate = performance.now();
     const eventEmitter = new EventEmitter();
 
     eventEmitter.on('event', (jsonEvent: JSONEvent) => {
+      nbEvents++;
       console.log('event is', jsonEvent);
       this._onEvent.fire(jsonEvent);
       if (jsonEvent.status === 'stop' && jsonEvent?.Type === 'container') {
@@ -163,7 +169,21 @@ export class ContainerProviderRegistry {
     api.getEvents((err, stream) => {
       if (err) {
         console.log('error is', err);
+        errorCallback(new Error('Error in handling events', err));
       }
+
+      stream?.on('error', error => {
+        console.error('/event stream received an error.', error);
+        // log why it failed and after how many ms connection dropped
+        this.telemetryService.track('handleContainerEventsFailure', {
+          nbEvents,
+          failureAfter: performance.now() - startDate,
+          error,
+        });
+        // notify the error (do not throw as we're inside handlers/callbacks)
+        errorCallback(new Error('Error in handling events', error));
+      });
+
       const pipeline = stream?.pipe(StreamValues.withParser());
       pipeline?.on('error', error => {
         console.error('Error while parsing events', error);
@@ -210,11 +230,33 @@ export class ContainerProviderRegistry {
     internalProvider: InternalContainerProvider,
     containerProviderConnection: containerDesktopAPI.ContainerProviderConnection,
   ) {
+    // abort if connection is stopped
+    if (containerProviderConnection.status() === 'stopped') {
+      console.log('Aborting reconnect due to error as connection is now stopped');
+      return;
+    }
+
     internalProvider.api = new Dockerode({ socketPath: containerProviderConnection.endpoint.socketPath });
     if (containerProviderConnection.type === 'podman') {
       internalProvider.libpodApi = internalProvider.api as unknown as LibPod;
     }
-    this.handleEvents(internalProvider.api);
+
+    // in case of errors reported during handling events like the connection is aborted, etc.
+    // we need to reconnect the provider
+    const errorHandler = (error: Error) => {
+      console.warn('Error when handling events', error, 'Will reconnect in 5s', error);
+      internalProvider.api = undefined;
+      internalProvider.libpodApi = undefined;
+
+      // ok we had some errors so we need to reconnect the provider
+      // delay the reconnection to avoid too many reconnections
+      // retry in 5 seconds
+      setTimeout(() => {
+        this.setupConnectionAPI(internalProvider, containerProviderConnection);
+      }, this.retryDelayEvents);
+    };
+
+    this.handleEvents(internalProvider.api, errorHandler);
     this.apiSender.send('provider-change', {});
   }
 
@@ -289,7 +331,7 @@ export class ContainerProviderRegistry {
   }
 
   // do not use inspect information
-  async listSimpleContainers(): Promise<SimpleContainerInfo[]> {
+  async listSimpleContainers(abortController?: AbortController): Promise<SimpleContainerInfo[]> {
     let telemetryOptions = {};
     const containers = await Promise.all(
       Array.from(this.internalProviders.values()).map(async provider => {
@@ -299,7 +341,7 @@ export class ContainerProviderRegistry {
             return [];
           }
 
-          const containers = await providerApi.listContainers({ all: true });
+          const containers = await providerApi.listContainers({ all: true, abortSignal: abortController?.signal });
           return Promise.all(
             containers.map(async container => {
               const containerInfo: SimpleContainerInfo = {
@@ -328,9 +370,13 @@ export class ContainerProviderRegistry {
   }
 
   // listSimpleContainers by matching label and key
-  async listSimpleContainersByLabel(label: string, key: string): Promise<SimpleContainerInfo[]> {
+  async listSimpleContainersByLabel(
+    label: string,
+    key: string,
+    abortController?: AbortController,
+  ): Promise<SimpleContainerInfo[]> {
     // Get all the containers using listSimpleContainers
-    const containers = await this.listSimpleContainers();
+    const containers = await this.listSimpleContainers(abortController);
 
     // Find all the containers that match the label + key
     return containers.filter(container => {
@@ -817,10 +863,10 @@ export class ContainerProviderRegistry {
     return this.getMatchingEngine(engineId).getImage(imageId);
   }
 
-  async stopContainer(engineId: string, id: string): Promise<void> {
+  async stopContainer(engineId: string, id: string, abortController?: AbortController): Promise<void> {
     let telemetryOptions = {};
     try {
-      return this.getMatchingContainer(engineId, id).stop();
+      return this.getMatchingContainer(engineId, id).stop({ abortSignal: abortController?.signal });
     } catch (error) {
       telemetryOptions = { error: error };
       throw error;
@@ -873,13 +919,17 @@ export class ContainerProviderRegistry {
     imageTag: string,
     callback: (name: string, data: string) => void,
     authInfo?: containerDesktopAPI.ContainerAuthInfo,
+    abortController?: AbortController,
   ): Promise<void> {
     let telemetryOptions = {};
     try {
       const engine = this.getMatchingEngine(engineId);
       const image = engine.getImage(imageTag);
       const authconfig = authInfo || this.imageRegistry.getAuthconfigForImage(imageTag);
-      const pushStream = await image.push({ authconfig });
+      const pushStream = await image.push({
+        authconfig,
+        abortSignal: abortController?.signal,
+      });
       pushStream.on('end', () => {
         callback('end', '');
       });
@@ -907,6 +957,7 @@ export class ContainerProviderRegistry {
     providerContainerConnectionInfo: ProviderContainerConnectionInfo | containerDesktopAPI.ContainerProviderConnection,
     imageName: string,
     callback: (event: PullEvent) => void,
+    abortController?: AbortController,
   ): Promise<void> {
     let telemetryOptions = {};
     try {
@@ -914,6 +965,7 @@ export class ContainerProviderRegistry {
       const matchingEngine = this.getMatchingEngineFromConnection(providerContainerConnectionInfo);
       const pullStream = await matchingEngine.pull(imageName, {
         authconfig,
+        abortSignal: abortController?.signal,
       });
       // eslint-disable-next-line @typescript-eslint/ban-types
       let resolve: () => void;
@@ -988,11 +1040,11 @@ export class ContainerProviderRegistry {
     }
   }
 
-  async deleteContainer(engineId: string, id: string): Promise<void> {
+  async deleteContainer(engineId: string, id: string, abortController?: AbortController): Promise<void> {
     let telemetryOptions = {};
     try {
       // use force to delete it even it is running
-      return this.getMatchingContainer(engineId, id).remove({ force: true });
+      return this.getMatchingContainer(engineId, id).remove({ force: true, abortSignal: abortController?.signal });
     } catch (error) {
       telemetryOptions = { error: error };
       throw error;
@@ -1001,7 +1053,7 @@ export class ContainerProviderRegistry {
     }
   }
 
-  async startContainer(engineId: string, id: string): Promise<void> {
+  async startContainer(engineId: string, id: string, abortController?: AbortController): Promise<void> {
     let telemetryOptions = {};
     try {
       const engine = this.internalProviders.get(engineId);
@@ -1010,8 +1062,7 @@ export class ContainerProviderRegistry {
       if (engine) {
         await this.attachToContainer(engine, container);
       }
-
-      return container.start();
+      return container.start({ abortSignal: abortController?.signal } as unknown as Dockerode.ContainerStartOptions);
     } catch (error) {
       telemetryOptions = { error: error };
       throw error;
@@ -1183,7 +1234,7 @@ export class ContainerProviderRegistry {
     }
   }
 
-  async restartContainer(engineId: string, id: string): Promise<void> {
+  async restartContainer(engineId: string, id: string, abortController?: AbortController): Promise<void> {
     let telemetryOptions = {};
     try {
       const engine = this.internalProviders.get(engineId);
@@ -1193,7 +1244,7 @@ export class ContainerProviderRegistry {
         await this.attachToContainer(engine, container);
       }
 
-      return container.restart();
+      return container.restart({ abortSignal: abortController?.signal });
     } catch (error) {
       telemetryOptions = { error: error };
       throw error;
@@ -1205,11 +1256,16 @@ export class ContainerProviderRegistry {
   // Find all containers that match the against the given project name to
   // the label com.docker.compose.project (for example)
   // and then restart all the containers that have the following label AND key
-  async restartContainersByLabel(engineId: string, label: string, key: string): Promise<void> {
+  async restartContainersByLabel(
+    engineId: string,
+    label: string,
+    key: string,
+    abortController?: AbortController,
+  ): Promise<void> {
     let telemetryOptions = {};
     try {
       // Get all the containers using listSimpleContainers
-      const containers = await this.listSimpleContainers();
+      const containers = await this.listSimpleContainers(abortController);
 
       // Find all the containers that are using projectLabel and match the projectName
       const containersMatchingProject = containers.filter(container => {
@@ -1256,7 +1312,12 @@ export class ContainerProviderRegistry {
   }
 
   // Stop containers that match a label + key
-  async stopContainersByLabel(engineId: string, label: string, key: string): Promise<void> {
+  async stopContainersByLabel(
+    engineId: string,
+    label: string,
+    key: string,
+    abortController?: AbortController,
+  ): Promise<void> {
     let telemetryOptions = {};
     try {
       // Get all the containers using listSimpleContainers
@@ -1271,7 +1332,7 @@ export class ContainerProviderRegistry {
       const containerIds = containersMatchingProject.map(container => container.Id);
 
       // Stop all the containers
-      await Promise.all(containerIds.map(containerId => this.stopContainer(engineId, containerId)));
+      await Promise.all(containerIds.map(containerId => this.stopContainer(engineId, containerId, abortController)));
     } catch (error) {
       telemetryOptions = { error: error };
       throw error;
@@ -1281,7 +1342,12 @@ export class ContainerProviderRegistry {
   }
 
   // Delete all containers that match a certain label and key
-  async deleteContainersByLabel(engineId: string, label: string, key: string): Promise<void> {
+  async deleteContainersByLabel(
+    engineId: string,
+    label: string,
+    key: string,
+    abortController?: AbortController,
+  ): Promise<void> {
     let telemetryOptions = {};
     try {
       // Get all the containers using listSimpleContainers
@@ -1294,7 +1360,7 @@ export class ContainerProviderRegistry {
       const containerIds = containersMatchingProject.map(container => container.Id);
 
       // Delete all the containers in containerIds
-      await Promise.all(containerIds.map(containerId => this.deleteContainer(engineId, containerId)));
+      await Promise.all(containerIds.map(containerId => this.deleteContainer(engineId, containerId, abortController)));
     } catch (error) {
       telemetryOptions = { error: error };
       throw error;
@@ -1303,7 +1369,12 @@ export class ContainerProviderRegistry {
     }
   }
 
-  async logsContainer(engineId: string, id: string, callback: (name: string, data: string) => void): Promise<void> {
+  async logsContainer(
+    engineId: string,
+    id: string,
+    callback: (name: string, data: string) => void,
+    abortController?: AbortController,
+  ): Promise<void> {
     let telemetryOptions = {};
     let firstMessage = true;
     const container = this.getMatchingContainer(engineId, id);
@@ -1312,6 +1383,7 @@ export class ContainerProviderRegistry {
         follow: true,
         stdout: true,
         stderr: true,
+        abortSignal: abortController?.signal,
       })
       .then(containerStream => {
         containerStream.on('end', () => {
@@ -1338,6 +1410,7 @@ export class ContainerProviderRegistry {
     command: string[],
     onStdout: (data: Buffer) => void,
     onStderr: (data: Buffer) => void,
+    abortController?: AbortController,
   ): Promise<void> {
     const container = this.getMatchingContainer(engineId, id);
 
@@ -1349,7 +1422,7 @@ export class ContainerProviderRegistry {
       Tty: false,
     });
 
-    const execStream = await exec.start({ hijack: true, stdin: false });
+    const execStream = await exec.start({ hijack: true, stdin: false, abortSignal: abortController?.signal });
 
     const wrappedAsStream = (redirect: (data: Buffer) => void): Writable => {
       return new Writable({
@@ -1868,6 +1941,7 @@ export class ContainerProviderRegistry {
     imageName: string,
     selectedProvider: ProviderContainerConnectionInfo,
     eventCollect: (eventName: 'stream' | 'error' | 'finish', data: string) => void,
+    abortController?: AbortController,
   ): Promise<unknown> {
     let telemetryOptions = {};
     try {
@@ -1899,6 +1973,7 @@ export class ContainerProviderRegistry {
           registryconfig,
           dockerfile: relativeContainerfilePath,
           t: imageName,
+          abortSignal: abortController?.signal,
         })) as unknown as Stream;
       } catch (error: unknown) {
         console.log('error in buildImage', error);
@@ -1954,37 +2029,29 @@ export class ContainerProviderRegistry {
   }
 
   async info(engineId: string): Promise<containerDesktopAPI.ContainerEngineInfo> {
-    let telemetryOptions = {};
-    try {
-      const provider = this.internalProviders.get(engineId);
-      if (!provider) {
-        throw new Error('no engine matching this container');
-      }
-      if (!provider.api) {
-        throw new Error('no running provider for the matching container');
-      }
-      if (provider.libpodApi) {
-        const podmanInfo = await provider.libpodApi.podmanInfo();
-        return {
-          cpus: podmanInfo.host.cpus,
-          cpuIdle: podmanInfo.host.cpuUtilization.idlePercent,
-          memory: podmanInfo.host.memTotal,
-          memoryUsed: podmanInfo.host.memTotal - podmanInfo.host.memFree,
-          diskSize: podmanInfo.store.graphRootAllocated,
-          diskUsed: podmanInfo.store.graphRootUsed,
-        };
-      } else {
-        const dockerInfo = await provider.api.info();
-        return {
-          cpus: dockerInfo.NCPU,
-          memory: dockerInfo.MemTotal,
-        };
-      }
-    } catch (error) {
-      telemetryOptions = { error: error };
-      throw error;
-    } finally {
-      this.telemetryService.track('info', telemetryOptions);
+    const provider = this.internalProviders.get(engineId);
+    if (!provider) {
+      throw new Error('no engine matching this container');
+    }
+    if (!provider.api) {
+      throw new Error('no running provider for the matching container');
+    }
+    if (provider.libpodApi) {
+      const podmanInfo = await provider.libpodApi.podmanInfo();
+      return {
+        cpus: podmanInfo.host.cpus,
+        cpuIdle: podmanInfo.host.cpuUtilization.idlePercent,
+        memory: podmanInfo.host.memTotal,
+        memoryUsed: podmanInfo.host.memTotal - podmanInfo.host.memFree,
+        diskSize: podmanInfo.store.graphRootAllocated,
+        diskUsed: podmanInfo.store.graphRootUsed,
+      };
+    } else {
+      const dockerInfo = await provider.api.info();
+      return {
+        cpus: dockerInfo.NCPU,
+        memory: dockerInfo.MemTotal,
+      };
     }
   }
 }

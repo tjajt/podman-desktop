@@ -85,6 +85,7 @@ const setupPodmanNotification: extensionApi.NotificationOptions = {
   highlight: true,
   silent: true,
 };
+let notificationDisposable: extensionApi.Disposable;
 
 export type MachineJSON = {
   Name: string;
@@ -116,7 +117,7 @@ export type MachineInfo = {
   memoryUsage: number;
 };
 
-async function updateMachines(provider: extensionApi.Provider): Promise<void> {
+export async function updateMachines(provider: extensionApi.Provider): Promise<void> {
   // init machines available
   let machineListOutput: string;
   try {
@@ -124,7 +125,7 @@ async function updateMachines(provider: extensionApi.Provider): Promise<void> {
   } catch (error) {
     if (shouldNotifySetup) {
       // push setup notification
-      extensionApi.window.showNotification(setupPodmanNotification);
+      notificationDisposable = extensionApi.window.showNotification(setupPodmanNotification);
       shouldNotifySetup = false;
     }
     throw error;
@@ -135,7 +136,7 @@ async function updateMachines(provider: extensionApi.Provider): Promise<void> {
   extensionApi.context.setValue('podmanMachineExists', machines.length > 0, 'onboarding');
   if (shouldNotifySetup && machines.length === 0) {
     // push setup notification
-    extensionApi.window.showNotification(setupPodmanNotification);
+    notificationDisposable = extensionApi.window.showNotification(setupPodmanNotification);
     shouldNotifySetup = false;
   }
 
@@ -169,15 +170,19 @@ async function updateMachines(provider: extensionApi.Provider): Promise<void> {
     const userModeNetworking = isWindows() ? machine.UserModeNetworking : true;
     podmanMachinesInfo.set(machine.Name, {
       name: machine.Name,
-      memory: machineInfo?.memory,
-      cpus: machineInfo?.cpus,
-      diskSize: machineInfo?.diskSize,
+      memory: machineInfo ? machineInfo.memory : Number(machine.Memory),
+      cpus: machineInfo ? machineInfo.cpus : machine.CPUs,
+      diskSize: machineInfo ? machineInfo.diskSize : Number(machine.DiskSize),
       userModeNetworking: userModeNetworking,
-      cpuUsage: machineInfo?.cpuIdle ? 100 - machineInfo?.cpuIdle : 0,
+      cpuUsage: machineInfo?.cpuIdle !== undefined ? 100 - machineInfo?.cpuIdle : 0,
       diskUsage:
-        machineInfo?.diskUsed && machineInfo?.diskSize ? (machineInfo?.diskUsed * 100) / machineInfo?.diskSize : 0,
+        machineInfo?.diskUsed !== undefined && machineInfo?.diskSize > 0
+          ? (machineInfo?.diskUsed * 100) / machineInfo?.diskSize
+          : 0,
       memoryUsage:
-        machineInfo?.memory && machineInfo?.memoryUsed ? (machineInfo?.memoryUsed * 100) / machineInfo?.memory : 0,
+        machineInfo?.memory !== undefined && machineInfo?.memoryUsed > 0
+          ? (machineInfo?.memoryUsed * 100) / machineInfo?.memory
+          : 0,
     });
 
     if (!podmanMachinesStatuses.has(machine.Name)) {
@@ -547,7 +552,7 @@ async function monitorProvider(provider: extensionApi.Provider) {
         // and the notification is handled by checking the machine
         if (isLinux() && shouldNotifySetup) {
           // push setup notification
-          extensionApi.window.showNotification(setupPodmanNotification);
+          notificationDisposable = extensionApi.window.showNotification(setupPodmanNotification);
           shouldNotifySetup = false;
         }
       } else if (installedPodman.version) {
@@ -560,6 +565,8 @@ async function monitorProvider(provider: extensionApi.Provider) {
         // if podman has been installed, we reset the notification flag so if podman is uninstalled in future we can show the notification again
         if (isLinux()) {
           shouldNotifySetup = true;
+          // notification is no more required
+          notificationDisposable?.dispose();
         }
       }
     } catch (error) {
@@ -626,7 +633,9 @@ async function registerProviderFor(provider: extensionApi.Provider, machineInfo:
   await containerConfiguration.update('machine.cpus', machineInfo.cpus);
   await containerConfiguration.update('machine.memory', machineInfo.memory);
   await containerConfiguration.update('machine.diskSize', machineInfo.diskSize);
-  await containerConfiguration.update('machine.cpuUsage', machineInfo.cpuUsage);
+  await containerConfiguration.update('machine.cpusUsage', machineInfo.cpuUsage);
+  await containerConfiguration.update('machine.memoryUsage', machineInfo.memoryUsage);
+  await containerConfiguration.update('machine.diskSizeUsage', machineInfo.diskUsage);
 
   currentConnections.set(machineInfo.name, disposable);
   storedExtensionContext.subscriptions.push(disposable);
@@ -754,8 +763,12 @@ export function initTelemetryLogger(): void {
   telemetryLogger = extensionApi.env.createTelemetryLogger();
 }
 
-export async function activate(extensionContext: extensionApi.ExtensionContext): Promise<void> {
+export function initExtensionContext(extensionContext: extensionApi.ExtensionContext) {
   storedExtensionContext = extensionContext;
+}
+
+export async function activate(extensionContext: extensionApi.ExtensionContext): Promise<void> {
+  initExtensionContext(extensionContext);
 
   initTelemetryLogger();
 
@@ -1034,17 +1047,17 @@ export async function activate(extensionContext: extensionApi.ExtensionContext):
   });
 
   const onboardingCheckInstallationCommand = extensionApi.commands.registerCommand(
-    'podman.onboarding.checkPodmanInstalled',
+    'podman.onboarding.checkInstalledCommand',
     async () => {
       const installation = await getPodmanInstallation();
       const installed = installation ? true : false;
       extensionApi.context.setValue('podmanIsNotInstalled', !installed, 'onboarding');
       if (installed) {
-        extensionApi.context.setValue('podmanInstalledTitle', 'Podman already installed', 'onboarding');
+        extensionApi.context.setValue('installationSuccessViewTitle', 'Podman already installed', 'onboarding');
       } else {
-        extensionApi.context.setValue('podmanInstalledTitle', 'Podman successfully installed', 'onboarding');
+        extensionApi.context.setValue('installationSuccessViewTitle', 'Podman successfully installed', 'onboarding');
       }
-      telemetryLogger.logUsage('podman.onboarding.checkPodmanInstalled', {
+      telemetryLogger.logUsage('podman.onboarding.checkInstalledCommand', {
         status: installed,
         version: installation?.version || '',
       });
@@ -1052,7 +1065,7 @@ export async function activate(extensionContext: extensionApi.ExtensionContext):
   );
 
   const onboardingCheckReqsCommand = extensionApi.commands.registerCommand(
-    'podman.onboarding.checkPodmanRequirements',
+    'podman.onboarding.checkRequirementsCommand',
     async () => {
       const checks = podmanInstall.getInstallChecks() || [];
       const result = [];
@@ -1104,7 +1117,7 @@ export async function activate(extensionContext: extensionApi.ExtensionContext):
 
       extensionApi.context.setValue('requirementsStatus', successful ? 'ok' : 'failed', 'onboarding');
       extensionApi.context.setValue('warningsMarkdown', warnings, 'onboarding');
-      telemetryLogger.logUsage('podman.onboarding.checkPodmanRequirements', telemetryRecords);
+      telemetryLogger.logUsage('podman.onboarding.checkRequirementsCommand', telemetryRecords);
     },
   );
 
@@ -1421,6 +1434,8 @@ export async function createMachine(
   }
   extensionApi.context.setValue('podmanMachineExists', true, 'onboarding');
   shouldNotifySetup = true;
+  // notification is no more required
+  notificationDisposable?.dispose();
 }
 
 function setupDisguisedPodmanSocketWatcher(

@@ -2,6 +2,7 @@
 
 ## Pre-requisites
 
+- Create Enhancement Issue `Release vX.X.X` for current sprint, then update the label to `kind/release` and assign it to yourself.
 - Confirm with Podman Desktop maintainers that pending / need-to-go-in PR's have been merged.
 - Notify main contributors on Discord / Slack.
 - Release notes for the blog: Communicate with the person who has been tasked with creating the documentation. If you are assigned, see the below "Documentation" section.
@@ -15,7 +16,7 @@ Below is what a typical release week may look like:
 - **Monday (Notify):** 48-hour notification. Communicate to maintainers and public channels a release will be cut on Wednesday and to merge any pending PRs. Inform QE team. Start work on blog post as it is usually the longest part of the release process.
 - **Tuesday (Staging, Testing & Blog):** Stage the release (see instructions below) to create a new cut of the release to test. Test the pre-release (master branch) build briefly. Get feedback from committers (if applicable). Push the blog post for review (as it usually takes a few back-and-forth reviews on documentation).
 - **Wednesday (Release):** Cut the new release using the below release process. The release will take 24 hours for release to hit all release channels (Flatpak, Brew, Chocolatey, etc.). We aim to have a release out _by Thursday_ so we do not have any surprises leading into the weekend.
-- **Thursday (Post-release Testing & Blog):** Test the post-release build briefly for any critical bugs. Confirm that new release has been pushed to all release channels. Push the blog post live.
+- **Thursday (Post-release Testing & Blog):** Test the post-release build briefly for any critical bugs. Confirm that new release has been pushed to all release channels. Push the blog post live. Get a known issues list together from QE and publish to the Podman Desktop Discussions, link to this from the release notes.
 - **Friday (Communicate):** Friday is statistically the best day for new announcements. Post on internal channels. Post on reddit, hackernews, twitter, etc.
 
 ## Releasing on GitHub
@@ -25,8 +26,8 @@ Below is what a typical release week may look like:
 1. Enter the name of the release. Example: `0.12.0` (DO NOT use the v prefix like v0.12.0)
 1. Specify the branch to use for the new release. It's main for all major releases. For a bugfix release, you'll select a different branch.
 1. Click on the `Run workflow` button.
-1. Note: `Run workflow` takes approximatley 30-50 minutes. Brew a coffee, work on the release notes, and/or complete the next two steps while you wait.
-1. Close the milestone for the respective release, make sure that all tasks within the milesetone are completed / updated before closing. https://github.com/containers/podman-desktop/milestones
+1. Note: `Run workflow` takes approximately 30-50 minutes. Brew a coffee, work on the release notes, and/or complete the next two steps while you wait.
+1. Close the milestone for the respective release, make sure that all tasks within the milestone are completed / updated before closing. https://github.com/containers/podman-desktop/milestones
 1. If not already created, click on `New Milestone` and create a new milestone for the NEXT release.
 1. Check that https://github.com/containers/podman-desktop/actions/workflows/release.yaml has been completed. Sometimes it will flake, so you may need to re-run it.
 1. There should be an automated PR that has been created. Approve this and set to auto-merge. This will be automatically merged in after all tests have been ran (takes 10-30 minutes). The title looks like `chore: 📢 Bump version to 0.13.0`. Rerun workflow manually if some of e2e tests are failing.
@@ -113,6 +114,10 @@ You can view the progress at: https://community.chocolatey.org/packages/podman-d
    ```sh
    podman run --rm -it -v %CD%\podman-desktop-0.12.0:/podman quay.io/podman-desktop/flatpak-node-generator yarn /podman/yarn.lock -o /podman/generated-sources.json
    ```
+   or (for :penguin: Linux users)
+   ```sh
+   podman run --rm -it -v %CD%\podman-desktop-0.12.0:/podman:z quay.io/podman-desktop/flatpak-node-generator yarn /podman/yarn.lock -o /podman/generated-sources.json
+   ```
 1. Copy the file `$(pwd)/podman-desktop-0.12.0/generated-sources.json` to `generated-sources.json`
 1. Only commit the files:
 
@@ -192,6 +197,8 @@ slug: podman-desktop-release-X.X
 authors: [YOURUSERNAME]
 tags: [podman-desktop, release, kubernetes, openshift]
 hide_table_of_contents: false
+<!-- This image link is used for social media previews / thumbnails. Release images are available: https://github.com/containers/podman-desktop-internal/tree/main/release-images -->
+image: /blog/img/podman-desktop-release-1.X/X.png
 ---
 
 <!-- ADD IMPORT REACTPLAYER IF USING VIDEO -->
@@ -213,6 +220,7 @@ Podman Desktop X.X is now available. [Click here to download it](/downloads)!
 <!-- IDEALLY, ADD CARTOON SELKIE FOR RELEASE -->
 
 <!-- EXAMPLE -->
+<!-- Release images are available: https://github.com/containers/podman-desktop-internal/tree/main/release-images -->
 <!-- ![Podman-desktop-1-1-hero](img/podman-desktop-release-1.1/podman-desktop-release-1.1.png) -->
 
 ---
@@ -252,7 +260,7 @@ Podman Desktop X.X is now available. [Click here to download it](/downloads)!
 ## Community Thank You
 
 🎉 We’d like to say a big thank you to everyone who helped to make Podman Desktop even better. In this
-sprint we received pull requests from the following people:
+release we received pull requests from the following people:
 
 <!-- INCLUDE SHOUTOUTS TO OUTSIDE CONTRIBUTORS -->
 <!-- EXAMPLE -->

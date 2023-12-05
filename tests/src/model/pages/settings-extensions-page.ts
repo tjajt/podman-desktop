@@ -16,18 +16,38 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
-import type { Locator, Page } from 'playwright';
+import type { Locator, Page } from '@playwright/test';
 import { SettingsPage } from './settings-page';
 
 export class SettingsExtensionsPage extends SettingsPage {
   readonly heading: Locator;
   readonly featuredExtensions: Locator;
   readonly devSandboxBox: Locator;
+  readonly openshiftLocalBox: Locator;
+  readonly extensionsTable: Locator;
 
   constructor(page: Page) {
     super(page, 'Extensions');
-    this.heading = page.getByRole('heading', { name: 'Extensions' });
+    this.heading = page.getByText('Extensions');
     this.featuredExtensions = page.getByLabel('FeaturedExtensions');
     this.devSandboxBox = this.featuredExtensions.getByLabel('Developer Sandbox');
+    this.openshiftLocalBox = this.featuredExtensions.getByLabel('OpenShift Local');
+    this.extensionsTable = page.getByRole('table');
+  }
+
+  public getExtensionRowFromTable(extensionName: string): Locator {
+    return this.extensionsTable.getByRole('row', { name: extensionName });
+  }
+
+  public getExtensionStopButton(extensionRow: Locator): Locator {
+    return extensionRow.getByLabel('Extension Action Stop');
+  }
+
+  public getExtensionStartButton(extensionRow: Locator): Locator {
+    return extensionRow.getByLabel('Extension Action Start');
+  }
+
+  public getFeaturedExtension(extensionName: string): Locator {
+    return this.featuredExtensions.getByLabel(extensionName, { exact: true });
   }
 }

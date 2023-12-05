@@ -45,8 +45,10 @@ import type { ViewRegistry } from './view-registry.js';
 import type { Context } from './context/context.js';
 import type { Proxy } from './proxy.js';
 import { afterEach } from 'node:test';
-import type { CliToolOptions } from '@podman-desktop/api';
+import type { CliToolOptions, CliToolUpdate, Logger } from '@podman-desktop/api';
 import type { NotificationRegistry } from './notification-registry.js';
+import type { ImageCheckerImpl } from './image-checker.js';
+import type { CliToolImpl } from './cli-tool-impl.js';
 
 const apiSender: ApiSenderType = {
   send: vi.fn(),
@@ -92,6 +94,7 @@ suite('cli module', () => {
       vi.fn() as unknown as KubeGeneratorRegistry,
       cliToolRegistry,
       vi.fn() as unknown as NotificationRegistry,
+      vi.fn() as unknown as ImageCheckerImpl,
     );
   });
 
@@ -112,6 +115,8 @@ suite('cli module', () => {
         displayName: 'tool-display-name',
         markdownDescription: 'markdown description',
         images: {},
+        version: '1.0.1',
+        path: 'path/to/tool-name',
       };
       const newCliTool = api.cli.createCliTool(options);
       expect(newCliTool.id).equals(`${extManifest.publisher}.${extManifest.name}.${options.name}`);
@@ -129,6 +134,8 @@ suite('cli module', () => {
         displayName: 'tool-display-name',
         markdownDescription: 'markdown description',
         images: {},
+        version: '1.0.1',
+        path: 'path/to/tool-name',
       };
       api.cli.createCliTool(options);
       expect(apiSender.send).toBeCalledWith('cli-tool-create');
@@ -141,6 +148,8 @@ suite('cli module', () => {
         displayName: 'tool-display-name',
         markdownDescription: 'markdown description',
         images: {},
+        version: '1.0.1',
+        path: 'path/to/tool-name',
       };
       const newCliTool = api.cli.createCliTool(options);
       const infoList = cliToolRegistry.getCliToolInfos();
@@ -165,6 +174,8 @@ suite('cli module', () => {
         displayName: 'tool-display-name',
         markdownDescription: 'markdown description',
         images: {},
+        version: '1.0.1',
+        path: 'path/to/tool-name',
       };
       const newCliTool = api.cli.createCliTool(options);
       newCliTool.dispose();
@@ -178,6 +189,8 @@ suite('cli module', () => {
         displayName: 'tool-display-name',
         markdownDescription: 'markdown description',
         images: {},
+        version: '1.0.1',
+        path: 'path/to/tool-name',
       };
       const newCliTool = api.cli.createCliTool(options);
       const infoListAfterCreate = cliToolRegistry.getCliToolInfos();
@@ -185,6 +198,38 @@ suite('cli module', () => {
       newCliTool.dispose();
       const infoListAfterDispose = cliToolRegistry.getCliToolInfos();
       expect(infoListAfterDispose.length).equals(0);
+    });
+  });
+
+  suite('update CliTool', () => {
+    test('expect updater is registered and called', async () => {
+      const api = extLoader.createApi('/path', extManifest);
+      const updateMock = vi.fn();
+      const updater: CliToolUpdate = {
+        doUpdate: updateMock,
+        version: '1.1.1',
+      };
+      const options: CliToolOptions = {
+        name: 'tool-name',
+        displayName: 'tool-display-name',
+        markdownDescription: 'markdown description',
+        images: {},
+        version: '1.0.1',
+        path: 'path/to/tool-name',
+      };
+      const newCliTool = api.cli.createCliTool(options);
+      // register the updater and call it
+      const disposeUpdater = cliToolRegistry.registerUpdate(newCliTool as CliToolImpl, updater);
+      await cliToolRegistry.updateCliTool(newCliTool.id, {} as unknown as Logger);
+
+      expect(updateMock).toBeCalled();
+      updateMock.mockReset();
+
+      // dispose the updater and check it is not called again
+      disposeUpdater.dispose();
+      await cliToolRegistry.updateCliTool(newCliTool.id, {} as unknown as Logger);
+
+      expect(updateMock).not.toBeCalled();
     });
   });
 });

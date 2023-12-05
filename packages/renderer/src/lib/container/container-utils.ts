@@ -113,6 +113,12 @@ export class ContainerUtils {
     }
   }
 
+  getOpeningUrls(containerInfo: ContainerInfo): string[] {
+    return containerInfo.Ports?.filter(port => port.PublicPort)
+      .map(port => port.PublicPort)
+      .map(port => `http://localhost:${port}`);
+  }
+
   getEngineId(containerInfo: ContainerInfo): string {
     return containerInfo.engineId;
   }
@@ -193,7 +199,13 @@ export class ContainerUtils {
       const group = containerInfo.groupInfo;
       if (group.type === ContainerGroupInfoTypeUI.STANDALONE) {
         // standalone group, insert with id as key
-        groups.set(containerInfo.id, { ...group, containers: [containerInfo], expanded: true, selected: false });
+        groups.set(containerInfo.id, {
+          ...group,
+          containers: [containerInfo],
+          expanded: true,
+          selected: false,
+          allContainersCount: 1,
+        });
       } else {
         if (!groups.has(group.name)) {
           groups.set(group.name, {
@@ -205,12 +217,14 @@ export class ContainerUtils {
             status: group.status,
             engineId: group.engineId,
             engineType: group.engineType,
+            allContainersCount: 0,
             containers: [],
           });
         }
         groups.get(group.name)?.containers.push(containerInfo);
       }
     });
+    groups.forEach(group => (group.allContainersCount = group.containers.length));
 
     Array.from(groups.values())
       .filter(group => group.type === ContainerGroupInfoTypeUI.COMPOSE)
@@ -267,5 +281,50 @@ export class ContainerUtils {
 
   adaptContextOnContainer(context: ContextUI, container: ContainerInfo): void {
     context.setValue('containerLabelKeys', container.Labels ? Object.keys(container.Labels) : []);
+  }
+
+  filterResetRunning(f: string) {
+    return f
+      .split(' ')
+      .filter(part => !part.startsWith('is:running') && !part.startsWith('is:stopped'))
+      .join(' ');
+  }
+
+  filterSetRunning(f: string) {
+    const parts = f.split(' ').filter(part => !part.startsWith('is:running') && !part.startsWith('is:stopped'));
+    parts.push('is:running');
+    return parts.join(' ');
+  }
+
+  filterSetStopped(f: string) {
+    const parts = f.split(' ').filter(part => !part.startsWith('is:running') && !part.startsWith('is:stopped'));
+    parts.push('is:stopped');
+    return parts.join(' ');
+  }
+
+  filterResetSearchTerm(f: string): string {
+    return f
+      .split(' ')
+      .filter(part => part.startsWith('is:'))
+      .join(' ');
+  }
+
+  filterIsRunning(f: string): boolean {
+    return f.split(' ').includes('is:running');
+  }
+
+  filterIsStopped(f: string): boolean {
+    return f.split(' ').includes('is:stopped');
+  }
+
+  filterIsAll(f: string): boolean {
+    return !this.filterIsRunning(f) && !this.filterIsStopped(f);
+  }
+
+  filterSearchTerm(f: string): string {
+    return f
+      .split(' ')
+      .filter(part => !part.startsWith('is:'))
+      .join(' ');
   }
 }

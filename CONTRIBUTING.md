@@ -61,10 +61,10 @@ Requirements:
 
 Optional Linux requirements:
 
-- [Flatpak builder, runtime, and SDK, version 22.08](https://docs.flatpak.org/en/latest/first-build.html)
+- [Flatpak builder, runtime, and SDK, version 23.08](https://docs.flatpak.org/en/latest/first-build.html)
   ```sh
   flatpak remote-add --if-not-exists flathub --user https://flathub.org/repo/flathub.flatpakrepo
-  flatpak install --user flathub org.flatpak.Builder org.freedesktop.Platform//22.08 org.freedesktop.Sdk//22.08
+  flatpak install --user flathub org.flatpak.Builder org.freedesktop.Platform//23.08 org.freedesktop.Sdk//23.08
   ```
 - GNU C and C++ compiler
   Fedora/RHEL
@@ -75,6 +75,10 @@ Optional Linux requirements:
   ```sh
   apt-get install build-essential
   ```
+
+On Windows:
+
+- [Microsoft Visual C++ Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170#visual-studio-2015-2017-2019-and-2022)
 
 ### Step 1. Fork and clone Podman Desktop
 
@@ -179,7 +183,7 @@ All files                     |    75.1 |    97.22 |   93.75 |    75.1 |
 For a detailed information about the code coverage you can search the mentioned folder and find `html` lcov report:
 `test-resources/coverage/extensions/compose/lcov-report/index.html`
 
-When contribuing the new code, you should consider not lowering overall code coverage.
+When contributing the new code, you should consider not lowering overall code coverage.
 
 ### Step 7. Code formatter / linter
 
@@ -223,13 +227,15 @@ PRs will be approved by an [approver][owners] listed in [`CODEOWNERS`](CODEOWNER
 
 We typically require one approval for code as well as documentation-related PR's. If it is a large code-related PR, proof of review / testing (a video / screenshot) is required.
 
+**Avoid enabling auto-merge** until the PR has undergone sufficient reviews and contributors have been given ample time for assessment. A maintainer will review the PR prior to the final merge. It's common for code PRs to require up to a week before merging due to reasons such as ongoing releases or dependencies on other PRs. Additionally, documentation PRs might take a few days for integration.
+
 Some tips for the PR process:
 
 - No PR too small! Feel free to open a PR against tests, bugs, new features, docs, etc.
 - Make sure you include as much information as possible in your PR so maintainers can understand.
 - Try to break up larger PRs into smaller ones for easier reviewing
 - Any additional code changes should be in a new commit so we can see what has changed between reviews.
-- Squash your commits into logical pieces of work
+- Squash your commits into logical pieces of work.
 
 ### Use the correct commit message semantics
 
@@ -351,7 +357,7 @@ If you're unsure where to add code (renderer, UI, extensions, plugins) see the b
 
 ### Extensions
 
-Podman Desktop is moduralized into extensions for each 'Provider'. You can also create and add your own extension.
+Podman Desktop is modularized into extensions for each 'Provider'. You can also create and add your own extension.
 
 See our [EXTENSIONS.md](/EXTENSIONS.md) document for more details.
 
@@ -359,12 +365,13 @@ See our [EXTENSIONS.md](/EXTENSIONS.md) document for more details.
 
 List of maintainer tasks to help the project run smoothly.
 
-### Triaging
+### Triage manager
 
-New issues will have the [status/need-triage](https://github.com/containers/podman-desktop/issues?q=is%3Aopen+is%3Aissue+label%3Astatus%2Fneed-triage) label assigned. As a maintainer, you'll have to curate these issues into the appropriate [area labels](https://github.com/containers/podman-desktop/labels?q=area%2F).
+Each sprint a new "Triage manager" will be assigned.
 
-Ideally complete the task every morning:
+Your responsibilities include:
 
-1. [View all the current triage labeled issues.](https://github.com/containers/podman-desktop/issues?q=is%3Aopen+is%3Aissue+label%3Astatus%2Fneed-triage)
-2. Add the appropriate [area label](https://github.com/containers/podman-desktop/labels?q=area%2F) that matches the issue. You can use "bulk edit" by clicking the checkmark of the issues and using the label dropdown selection.
-3. Remove the `status/need-triage` label.
+- Reviewing the [status/need-triage](https://github.com/containers/podman-desktop/issues?q=is%3Aopen+is%3Aissue+label%3Astatus%2Fneed-triage) label on new issues. As a maintainer, you will need to categorize these issues under the correct [area labels](https://github.com/containers/podman-desktop/labels?q=area%2F). Once categorized, remove the `status/need-triage` label and apply the appropriate area label.
+- Evaluating the severity of new issues. If an issue is classified as "critical" or "high priority" and requires immediate attention, tag a maintainer in the issue and notify them via the public community channel.
+- Identifying issues that are simple to resolve and marking them as "good first issue," thereby encouraging newcomers to contribute to the project.
+- Evaluating any stale / lingering pull requests and pinging the respective contributors. If the pull request has been opened for an extensive amount of time, ping someone to contact the contributor / push any changes required to get it merged in. If there is no communication / the pull request is stale, close them.

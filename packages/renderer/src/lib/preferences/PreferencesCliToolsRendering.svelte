@@ -1,0 +1,22 @@
+<script lang="ts">
+import { cliToolInfos } from '../../stores/cli-tools';
+import SettingsPage from './SettingsPage.svelte';
+import EngineIcon from '../ui/EngineIcon.svelte';
+import EmptyScreen from '../ui/EmptyScreen.svelte';
+import PreferencesCliTool from './PreferencesCliTool.svelte';
+</script>
+
+<SettingsPage title="CLI Tools">
+  <div class="h-full" role="table" aria-label="cli-tools">
+    <EmptyScreen
+      aria-label="no-resource-panel"
+      icon="{EngineIcon}"
+      title="No CLI tool has been registered"
+      message="Start an extension that registers a CLI"
+      hidden="{$cliToolInfos.length > 0}" />
+
+    {#each $cliToolInfos as cliTool}
+      <PreferencesCliTool cliTool="{cliTool}" />
+    {/each}
+  </div>
+</SettingsPage>

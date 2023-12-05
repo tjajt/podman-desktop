@@ -136,6 +136,35 @@ declare module '@podman-desktop/api' {
     readonly storagePath: string;
   }
 
+  /**
+   * A provider result represents the values a provider, like the {@linkcode ImageCheckerProvider},
+   * may return. For once this is the actual result type `T`, like `ImageChecks`, or a Promise that resolves
+   * to that type `T`. In addition, `null` and `undefined` can be returned - either directly or from a
+   * Promise.
+   *
+   * The snippets below are all valid implementations of the {@linkcode ImageCheckerProvider}:
+   *
+   * ```ts
+   * let a: ImageCheckerProvider = {
+   *  check(image: ImageInfo, token?: CancellationToken): ProviderResult<ImageChecks> {
+   *    return new ImageChecks();
+   *  }
+   *
+   * let b: ImageCheckerProvider = {
+   *  async check(image: ImageInfo, token?: CancellationToken): ProviderResult<ImageChecks> {
+   * 		return new ImageChecks();
+   * 	}
+   * }
+   *
+   * let c: ImageCheckerProvider = {
+   *  check(image: ImageInfo, token?: CancellationToken): ProviderResult<ImageChecks> {
+   * 		return; // undefined
+   * 	}
+   * }
+   * ```
+   */
+  export type ProviderResult<T> = T | undefined | Promise<T | undefined>;
+
   export type ProviderStatus =
     | 'not-installed'
     | 'installed'
@@ -2196,6 +2225,11 @@ declare module '@podman-desktop/api' {
      * admin privileges required
      */
     isAdmin?: boolean;
+
+    /**
+     * The encoding to use. Default utf8
+     */
+    encoding?: BufferEncoding;
   }
 
   /**
@@ -2447,6 +2481,32 @@ declare module '@podman-desktop/api' {
     displayName: string;
     markdownDescription: string;
     images: ProviderImages;
+
+    /**
+     * Within your extension, it is reccommended to implement your own functionality to check the current
+     * version number of the CLI tool. For example, parsing the information from the CLI tool's `--version` flag.
+     * Passing in path will also help to show where the CLI tool is expected to be installed.
+     * This is usually the ~/.local/share/containers/podman-desktop/extensions-storage directory.
+     * Note: The expected value should not include 'v'.
+     */
+    version: string;
+    path: string;
+  }
+
+  /**
+   * Options to update CliTool instance
+   */
+  export interface CliToolUpdateOptions {
+    version: string;
+    displayName?: string;
+    markdownDescription?: string;
+    images?: ProviderImages;
+    path?: string;
+  }
+
+  export interface CliToolUpdate {
+    version: string;
+    doUpdate: (logger: Logger) => Promise<void>;
   }
 
   export type CliToolState = 'registered';
@@ -2462,6 +2522,12 @@ declare module '@podman-desktop/api' {
       id: string;
       label: string;
     };
+
+    updateVersion(version: CliToolUpdateOptions): void;
+    onDidUpdateVersion: Event<string>;
+
+    // register cli update flow
+    registerUpdate(update: CliToolUpdate): Disposable;
   }
 
   /**
@@ -2477,5 +2543,31 @@ declare module '@podman-desktop/api' {
      * @returns CliTool instance
      */
     export function createCliTool(options: CliToolOptions): CliTool;
+  }
+
+  export interface ImageCheck {
+    name: string;
+    status: 'success' | 'failed';
+    severity?: 'low' | 'medium' | 'high' | 'critical';
+    markdownDescription?: string;
+  }
+
+  export interface ImageChecks {
+    checks: ImageCheck[];
+  }
+
+  export interface ImageCheckerProvider {
+    check(image: ImageInfo, token?: CancellationToken): ProviderResult<ImageChecks>;
+  }
+
+  export interface ImageCheckerProviderMetadata {
+    readonly label: string;
+  }
+
+  export namespace imageChecker {
+    export function registerImageCheckerProvider(
+      imageCheckerProvider: ImageCheckerProvider,
+      metadata?: ImageCheckerProviderMetadata,
+    ): Disposable;
   }
 }

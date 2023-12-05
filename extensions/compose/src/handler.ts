@@ -66,17 +66,18 @@ async function handleComposeBinaryToggle(
 }
 
 // Install the compose binary to the system from the local storage path
-async function installComposeBinary(detect: Detect, extensionContext: extensionApi.ExtensionContext): Promise<void> {
+export async function installComposeBinary(
+  detect: Detect,
+  extensionContext: extensionApi.ExtensionContext,
+): Promise<void> {
   const storagePath = await detect.getStoragePath();
   if (storagePath) {
     try {
       await installBinaryToSystem(storagePath, 'docker-compose');
-      await extensionApi.window.showInformationMessage(
-        `Compose binary has been successfully installed system-wide. Try with 'docker-compose' or 'podman compose' commands.`,
-      );
     } catch (error) {
       console.error(error);
       await extensionApi.window.showErrorMessage(`Unable to install docker-compose binary: ${error}`);
+      throw error;
     } finally {
       // Regardless of what happens, always update the configuration setting and context
       // for example, if this fails when installing, the configuration setting will be set back to false

@@ -34,10 +34,13 @@ export interface IProviderConnectionConfigurationPropertyRecorded extends IConfi
   providerId: string;
 }
 
-export interface IConnectionStatus {
+export interface ILoadingStatus {
   status: string;
   action?: string;
   inProgress: boolean;
+}
+
+export interface IConnectionStatus extends ILoadingStatus {
   error?: string;
 }
 
@@ -139,4 +142,22 @@ export function isPropertyValidInContext(when: string | undefined, context: Cont
     return expr.evaluate(context);
   }
   return false;
+}
+
+export function uncertainStringToNumber(value: string | number): number {
+  if (typeof value === 'number') return value;
+  return parseFloat(value);
+}
+
+export function validateProxyAddress(value: string): string | undefined {
+  if (value) {
+    try {
+      const u = new URL(value);
+      if (!u.hostname) {
+        return `Hostname missing from ${value}`;
+      }
+    } catch (err) {
+      return `Value ${value} should be an URL`;
+    }
+  }
 }

@@ -12,13 +12,13 @@ With Podman Desktop, you can view and select your current Kubernetes context in 
 
 #### Prerequisites
 
-- You have a Kubernetes context in your kubeconfig file: _<your_kubernetes_cluster>_.
-  For example, [Creating a kind cluster](/docs/onboarding-for-kubernetes/kind/creating-a-kind-cluster).
+- You have a Kubernetes context in your kubeconfig file: _&lt;your_kubernetes_cluster&gt;_.
+  For example, [Creating a kind cluster](/docs/kind/creating-a-kind-cluster).
 
 #### Procedure
 
-1. To view your current Kubernetes context, in the **Podman Desktop** main window status bar, see the name next to the <icon icon="fa-solid fa-server" size="lg" /> icon.
+1. To view your current Kubernetes context, in the **Podman Desktop** main window status bar, see the name next to the <Icon icon="fa-solid fa-server" size="lg" /> icon.
 
 1. (Optionally) To change your Kubernetes context:
-   1. Click <icon icon="fa-solid fa-server" size="lg" />.
+   1. Click <Icon icon="fa-solid fa-server" size="lg" />.
    2. In the drop-down menu, click the context name to activate.

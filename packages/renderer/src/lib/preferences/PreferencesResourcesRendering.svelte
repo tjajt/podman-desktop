@@ -41,6 +41,7 @@ import { ContextKeyExpr } from '../context/contextKey';
 import { normalizeOnboardingWhenClause } from '../onboarding/onboarding-utils';
 import Donut from '/@/lib/donut/Donut.svelte';
 import { PeerProperties } from './PeerProperties';
+import ConnectionErrorInfoButton from '../ui/ConnectionErrorInfoButton.svelte';
 export let properties: IConfigurationPropertyRecordedSchema[] = [];
 let providers: ProviderInfo[] = [];
 $: containerConnectionStatus = new Map<string, IConnectionStatus>();
@@ -359,7 +360,7 @@ function hasAnyConfiguration(provider: ProviderInfo) {
       href="/preferences/extensions"
       class="text-gray-700 underline underline-offset-2">Extensions</a>
   </span>
-  <div class="h-full">
+  <div class="h-full" role="region" aria-label="Featured Provider Resources">
     <EmptyScreen
       aria-label="no-resource-panel"
       icon="{EngineIcon}"
@@ -402,14 +403,14 @@ function hasAnyConfiguration(provider: ProviderInfo) {
                       (provider.containerProviderConnectionCreation
                         ? provider.containerProviderConnectionCreationDisplayName || undefined
                         : provider.kubernetesProviderConnectionCreation
-                        ? provider.kubernetesProviderConnectionCreationDisplayName
-                        : undefined) || provider.name}
+                          ? provider.kubernetesProviderConnectionCreationDisplayName
+                          : undefined) || provider.name}
                     {@const buttonTitle =
                       (provider.containerProviderConnectionCreation
                         ? provider.containerProviderConnectionCreationButtonTitle || undefined
                         : provider.kubernetesProviderConnectionCreation
-                        ? provider.kubernetesProviderConnectionCreationButtonTitle
-                        : undefined) || 'Create new'}
+                          ? provider.kubernetesProviderConnectionCreationButtonTitle
+                          : undefined) || 'Create new'}
                     <!-- create new provider button -->
                     <Tooltip tip="Create new {providerDisplayName}" bottom>
                       <Button
@@ -469,11 +470,7 @@ function hasAnyConfiguration(provider: ProviderInfo) {
                 <ConnectionStatus status="{container.status}" />
                 {#if containerConnectionStatus.has(getProviderConnectionName(provider, container))}
                   {@const status = containerConnectionStatus.get(getProviderConnectionName(provider, container))}
-                  {#if status?.error}
-                    <button
-                      class="ml-3 text-[9px] text-red-500 underline"
-                      on:click="{() => window.events?.send('toggle-task-manager', '')}">{status.action} failed</button>
-                  {/if}
+                  <ConnectionErrorInfoButton status="{status}" />
                 {/if}
               </div>
 
@@ -519,7 +516,7 @@ function hasAnyConfiguration(provider: ProviderInfo) {
               <PreferencesConnectionActions
                 provider="{provider}"
                 connection="{container}"
-                connectionStatuses="{containerConnectionStatus}"
+                connectionStatus="{containerConnectionStatus.get(getProviderConnectionName(provider, container))}"
                 updateConnectionStatus="{updateContainerStatus}"
                 addConnectionToRestartingQueue="{addConnectionToRestartingQueue}" />
               <div class="mt-1.5 text-gray-900 text-[9px]">
@@ -560,7 +557,7 @@ function hasAnyConfiguration(provider: ProviderInfo) {
               <PreferencesConnectionActions
                 provider="{provider}"
                 connection="{kubeConnection}"
-                connectionStatuses="{containerConnectionStatus}"
+                connectionStatus="{containerConnectionStatus.get(getProviderConnectionName(provider, kubeConnection))}"
                 updateConnectionStatus="{updateContainerStatus}"
                 addConnectionToRestartingQueue="{addConnectionToRestartingQueue}" />
             </div>

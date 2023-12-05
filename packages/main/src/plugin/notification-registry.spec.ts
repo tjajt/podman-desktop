@@ -20,16 +20,19 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import type { ApiSenderType } from './api.js';
 import type { Disposable } from './types/disposable.js';
 import { NotificationRegistry } from './notification-registry.js';
+import type { TaskManager } from './task-manager.js';
 
 let notificationRegistry: NotificationRegistry;
 const extensionId = 'myextension.id';
 const apiSender: ApiSenderType = { send: vi.fn() } as unknown as ApiSenderType;
+const createNotificationtaskMock = vi.fn();
+const taskManager: TaskManager = { createNotificationTask: createNotificationtaskMock } as unknown as TaskManager;
 
 let registerNotificationDisposable: Disposable;
 
 /* eslint-disable @typescript-eslint/no-empty-function */
 beforeEach(() => {
-  notificationRegistry = new NotificationRegistry(apiSender);
+  notificationRegistry = new NotificationRegistry(apiSender, taskManager);
   registerNotificationDisposable = notificationRegistry.registerExtension(extensionId);
 });
 
@@ -61,6 +64,10 @@ test('expect notification added to the queue', async () => {
   expect(queue[0].extensionId).toEqual(extensionId);
   expect(queue[0].title).toEqual('title');
   expect(queue[0].type).toEqual('info');
+  expect(createNotificationtaskMock).toBeCalledWith({
+    title: 'title',
+    body: 'description',
+  });
 });
 
 test('expect latest added notification is in top of the queue', async () => {
@@ -129,7 +136,7 @@ test('expect the queue to not have the notifications after they are removed by e
   });
   notificationRegistry.addNotification({
     extensionId,
-    title: 'title',
+    title: 'title1',
     body: 'description',
     type: 'info',
   });
@@ -139,7 +146,8 @@ test('expect the queue to not have the notifications after they are removed by e
 
   notificationRegistry.removeNotificationsByExtensionAndTitle(extensionId, 'title');
   queue = notificationRegistry.getNotifications();
-  expect(queue.length).toEqual(0);
+  expect(queue.length).toEqual(1);
+  expect(queue[0].title).equal('title1');
 });
 
 test('expect all notifications to be removed', async () => {
@@ -186,6 +194,35 @@ test('expect all notifications belonging to an extensions are removed after it i
   });
   let queue = notificationRegistry.getNotifications();
   expect(queue.length).toEqual(2);
+
+  registerNotificationDisposable.dispose();
+  queue = notificationRegistry.getNotifications();
+  expect(queue.length).toEqual(0);
+});
+
+test('expect same notification to only appear once if added multiple times', async () => {
+  notificationRegistry.addNotification({
+    extensionId,
+    title: '1',
+    body: '1',
+    type: 'info',
+  });
+  notificationRegistry.addNotification({
+    extensionId,
+    title: '2',
+    body: '2',
+    type: 'info',
+  });
+  notificationRegistry.addNotification({
+    extensionId,
+    title: '1',
+    body: '1',
+    type: 'info',
+  });
+  let queue = notificationRegistry.getNotifications();
+  expect(queue.length).toEqual(2);
+  expect(queue[0].title).equal('1');
+  expect(queue[1].title).equal('2');
 
   registerNotificationDisposable.dispose();
   queue = notificationRegistry.getNotifications();

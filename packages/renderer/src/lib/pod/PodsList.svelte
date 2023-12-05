@@ -17,7 +17,6 @@ import PodIcon from '../images/PodIcon.svelte';
 import PodActions from './PodActions.svelte';
 import KubePlayButton from '../kube/KubePlayButton.svelte';
 import moment from 'moment';
-import Tooltip from '../ui/Tooltip.svelte';
 import Prune from '../engine/Prune.svelte';
 import type { EngineInfoUI } from '../engine/EngineInfoUI';
 import ErrorMessage from '../ui/ErrorMessage.svelte';
@@ -25,6 +24,8 @@ import Checkbox from '../ui/Checkbox.svelte';
 import Button from '../ui/Button.svelte';
 import { faTrash } from '@fortawesome/free-solid-svg-icons';
 import StateChange from '../ui/StateChange.svelte';
+import ProviderInfo from '../ui/ProviderInfo.svelte';
+import Dots from '../ui/Dots.svelte';
 
 export let searchTerm = '';
 $: searchPattern.set(searchTerm);
@@ -199,25 +200,61 @@ function errorCallback(pod: PodInfoUI, errorMessage: string): void {
 </script>
 
 <NavPage bind:searchTerm="{searchTerm}" title="pods">
-  <div slot="additional-actions" class="space-x-2 flex flex-nowrap">
+  <svelte:fragment slot="additional-actions">
     {#if $podsInfos.length > 0}
       <Prune type="pods" engines="{enginesList}" />
     {/if}
     {#if providerPodmanConnections.length > 0}
       <KubePlayButton />
     {/if}
-  </div>
+  </svelte:fragment>
 
-  <div slot="bottom-additional-actions" class="flex flex-row justify-start items-center w-full">
+  <svelte:fragment slot="bottom-additional-actions">
     {#if selectedItemsNumber > 0}
       <Button
         on:click="{() => deleteSelectedPods()}"
         title="Delete {selectedItemsNumber} selected items"
         inProgress="{bulkDeleteInProgress}"
         icon="{faTrash}" />
-      <span class="pl-2">On {selectedItemsNumber} selected items.</span>
+      <span>On {selectedItemsNumber} selected items.</span>
     {/if}
-  </div>
+  </svelte:fragment>
+
+  <svelte:fragment slot="tabs">
+    <Button
+      type="tab"
+      on:click="{() => {
+        searchTerm = searchTerm
+          .split(' ')
+          .filter(pattern => pattern !== 'is:running' && pattern !== 'is:stopped')
+          .join(' ');
+      }}"
+      selected="{!searchTerm.includes('is:stopped') && !searchTerm.includes('is:running')}">All</Button>
+    <Button
+      type="tab"
+      on:click="{() => {
+        let temp = searchTerm
+          .trim()
+          .split(' ')
+          .filter(term => term !== 'is:stopped')
+          .join(' ')
+          .trim();
+        searchTerm = temp ? `${temp} is:running` : 'is:running';
+      }}"
+      selected="{searchTerm.includes('is:running')}">Running</Button>
+    <Button
+      type="tab"
+      on:click="{() => {
+        let temp = searchTerm
+          .trim()
+          .split(' ')
+          .filter(term => term !== 'is:running')
+          .join(' ')
+          .trim();
+        searchTerm = temp ? `${temp} is:stopped` : 'is:stopped';
+      }}"
+      selected="{searchTerm.includes('is:stopped')}">Stopped</Button>
+  </svelte:fragment>
 
   <div class="flex min-w-full h-full" slot="content">
     <table class="mx-5 w-full h-fit" class:hidden="{pods.length === 0}">
@@ -234,7 +271,9 @@ function errorCallback(pod: PodInfoUI, errorMessage: string): void {
           </th>
           <th class="text-center font-extrabold w-10 px-2">Status</th>
           <th>Name</th>
-          <th class="whitespace-nowrap px-6">age</th>
+          <th class="pl-3">Environment</th>
+          <th class="pl-3">Containers</th>
+          <th class="whitespace-nowrap px-6">Age</th>
           <th class="text-right pr-2">Actions</th>
         </tr>
       </thead>
@@ -258,22 +297,30 @@ function errorCallback(pod: PodInfoUI, errorMessage: string): void {
                   </div>
                   <div class="flex flex-row items-center">
                     <div class="text-xs text-violet-400">{pod.shortId}</div>
-                    <button
-                      class="ml-1 text-xs font-extra-light text-gray-900"
-                      class:cursor-pointer="{pod.containers.length > 0}"
-                      on:click="{() => openContainersFromPod(pod)}">
-                      {pod.containers.length} container{pod.containers.length > 1 ? 's' : ''}
-                    </button>
-                  </div>
-                  <div class="flex flex-row text-xs font-extra-light text-gray-900">
-                    <div class="px-2 inline-flex text-xs font-extralight rounded-full bg-slate-800 text-slate-400">
-                      {pod.engineName}{#if pod.kind === 'kubernetes'}<div class="ml-1">
-                          <Tooltip tip="{pod.engineId}" top>{pod.engineId.substring(0, 16)}</Tooltip>
-                        </div>{/if}
-                    </div>
                   </div>
                 </div>
               </div>
+            </td>
+            <td class="pl-3 whitespace-nowrap hover:cursor-pointer group">
+              <div class="flex items-center text-xs p-1 rounded-md text-gray-500">
+                <ProviderInfo provider="{pod.kind}" context="{pod.engineId}" />
+              </div>
+            </td>
+
+            <td class="pl-3 whitespace-nowrap">
+              <!-- If this is podman, make the dots clickable as it'll take us to the container menu 
+              this does not work if you click on a kubernetes type pod -->
+              {#if pod.kind === 'podman'}
+                <button
+                  class:cursor-pointer="{pod.containers.length > 0}"
+                  on:click="{() => openContainersFromPod(pod)}">
+                  <Dots containers="{pod.containers}" />
+                </button>
+              {:else}
+                <div class="flex items-center">
+                  <Dots containers="{pod.containers}" />
+                </div>
+              {/if}
             </td>
             <td class="px-6 py-2 whitespace-nowrap w-10">
               <div class="flex items-center">

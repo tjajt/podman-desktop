@@ -38,9 +38,10 @@ Podman Desktop has a set of context keys that are evaluated to Boolean true/fals
 
 Podman Desktop also provides context keys that return values that can be used to create meaningful expressions
 
-| Context key        | Value in it                                                                                       |
-| ------------------ | ------------------------------------------------------------------------------------------------- |
-| containerLabelKeys | A list of all labels belonging to the current container. Example: `"value in containerLabelKeys"` |
+| Context key        | Value in it                                                                                                             |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| containerLabelKeys | A list of all labels belonging to the current container. Example: `"value in containerLabelKeys"`                       |
+| selectedImageId    | The image id which the dashboard/image menu opened belong to. Example `"selectedImageId in imagesPushInProgressToKind"` |
 
 ### Add a custom when clause context
 
@@ -82,7 +83,7 @@ Logical operators allow combining simple context keys or when-clause expressions
 
 #### Equality operators
 
-Equality operators allow checking for equality of a context key's value againt a specified value.
+Equality operators allow checking for equality of a context key's value against a specified value.
 
 **Note:** the right side is a value and not considered as a context key, so no value is searched in the context. If it contains whitespaces, it must be wrapped in single-quotes (for example `'my tool.exe'`)
 

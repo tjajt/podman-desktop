@@ -73,7 +73,7 @@ function deployToKubernetes(): void {
 }
 
 function openGenerateKube(): void {
-  router.goto(`/compose/${encodeURI(compose.name)}/${encodeURI(compose.engineId)}/kube`);
+  router.goto(`/compose/details/${encodeURI(compose.name)}/${encodeURI(compose.engineId)}/kube`);
 }
 
 // If dropdownMenu = true, we'll change style to the imported dropdownMenu style

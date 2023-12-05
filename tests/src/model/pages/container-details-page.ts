@@ -16,7 +16,7 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
-import type { Locator, Page } from 'playwright';
+import type { Locator, Page } from '@playwright/test';
 import { BasePage } from './base-page';
 import { ContainersPage } from './containers-page';
 import { waitUntil, waitWhile } from '../../utility/wait';
@@ -91,5 +91,15 @@ export class ContainerDetailsPage extends BasePage {
     );
     // after delete is successful we expect to see containers page
     return new ContainersPage(this.page);
+  }
+
+  async checkMappedPort(port: string): Promise<boolean> {
+    await this.activateTab(ContainerDetailsPage.SUMMARY_TAB);
+    const summaryTable = this.getPage().getByRole('table');
+    const portsRow = summaryTable.locator('tr:has-text("Ports")');
+    const portsCell = portsRow.getByRole('cell').nth(1);
+    await portsCell.waitFor({ state: 'visible', timeout: 500 });
+    const portsText = await portsCell.innerText();
+    return portsText.includes(port);
   }
 }

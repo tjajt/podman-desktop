@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { ImageInfoUI } from './ImageInfoUI';
 import Route from '../../Route.svelte';
-import { onMount } from 'svelte';
+import { onDestroy, onMount } from 'svelte';
 import { imagesInfos } from '../../stores/images';
 import ImageIcon from '../images/ImageIcon.svelte';
 import StatusIcon from '../images/StatusIcon.svelte';
@@ -15,6 +15,10 @@ import RenameImageModal from './RenameImageModal.svelte';
 import DetailsPage from '../ui/DetailsPage.svelte';
 import Tab from '../ui/Tab.svelte';
 import { containersInfos } from '/@/stores/containers';
+import ImageDetailsCheck from './ImageDetailsCheck.svelte';
+import { imageCheckerProviders } from '/@/stores/image-checker-providers';
+import type { Unsubscriber } from 'svelte/motion';
+import type { ImageInfo } from '@podman-desktop/api';
 
 export let imageID: string;
 export let engineId: string;
@@ -35,17 +39,25 @@ function closeModals() {
   renameImageModal = false;
 }
 
+let imageInfo: ImageInfo | undefined;
 let image: ImageInfoUI;
 let detailsPage: DetailsPage;
 
+let showCheckTab: boolean = false;
+let providersUnsubscribe: Unsubscriber;
+
 onMount(() => {
+  providersUnsubscribe = imageCheckerProviders.subscribe(providers => {
+    showCheckTab = providers.length > 0;
+  });
+
   const imageUtils = new ImageUtils();
   // loading image info
   return imagesInfos.subscribe(images => {
-    const matchingImage = images.find(c => c.Id === imageID && c.engineId === engineId);
+    imageInfo = images.find(c => c.Id === imageID && c.engineId === engineId);
     let tempImage;
-    if (matchingImage) {
-      tempImage = imageUtils.getImageInfoUI(matchingImage, base64RepoTag, $containersInfos);
+    if (imageInfo) {
+      tempImage = imageUtils.getImageInfoUI(imageInfo, base64RepoTag, $containersInfos);
     }
     if (tempImage) {
       image = tempImage;
@@ -54,6 +66,11 @@ onMount(() => {
       detailsPage.close();
     }
   });
+});
+
+onDestroy(() => {
+  // unsubscribe from the store
+  providersUnsubscribe?.();
 });
 </script>
 
@@ -71,6 +88,9 @@ onMount(() => {
       <Tab title="Summary" url="summary" />
       <Tab title="History" url="history" />
       <Tab title="Inspect" url="inspect" />
+      {#if showCheckTab}
+        <Tab title="Check" url="check" />
+      {/if}
     </svelte:fragment>
     <svelte:fragment slot="content">
       <Route path="/summary" breadcrumb="Summary" navigationHint="tab">
@@ -81,6 +101,9 @@ onMount(() => {
       </Route>
       <Route path="/inspect" breadcrumb="Inspect" navigationHint="tab">
         <ImageDetailsInspect image="{image}" />
+      </Route>
+      <Route path="/check" breadcrumb="Check" navigationHint="tab">
+        <ImageDetailsCheck imageInfo="{imageInfo}" />
       </Route>
     </svelte:fragment>
   </DetailsPage>

@@ -70,7 +70,8 @@
       "dashboard/image": [
         {
           "command": "kind.image.move",
-          "title": "Push image to Kind cluster"
+          "title": "Push image to Kind cluster",
+          "disabled": "selectedImageId in imagesPushInProgressToKind"
         }
       ]
     },
@@ -104,14 +105,13 @@
     "@octokit/rest": "^20.0.2",
     "@podman-desktop/api": "^0.0.1",
     "mustache": "^4.2.0",
-    "yaml": "^2.3.3"
+    "yaml": "^2.3.4"
   },
   "devDependencies": {
-    "7zip-min": "^1.4.4",
+    "adm-zip": "^0.5.10",
     "mkdirp": "^3.0.1",
     "tmp-promise": "^3.0.3",
-    "vite": "^4.5.0",
-    "vitest": "^0.34.6",
-    "zip-local": "^0.3.5"
+    "vite": "^5.0.5",
+    "vitest": "^0.34.6"
   }
 }

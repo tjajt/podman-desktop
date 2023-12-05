@@ -228,7 +228,7 @@ async function deployToKube() {
     // All services are always created with one port (the first one), so we can use that port to create the ingress.
     // Must be a number
     if (servicesToCreate.length === 0) {
-      deployWarning = 'You need to deploy using services to create an ingress.';
+      deployWarning = `In order to create an Ingress a Pod must have a Service associated to a port mapping. Check that your container(s) has a port exposed correctly in order to generate a Service.`;
       deployStarted = false;
       return;
     } else if (servicesToCreate.length === 1) {
@@ -577,7 +577,7 @@ function updateKubeResult() {
               <ul class="list-disc list-inside">
                 {#each createdRoutes as createdRoute}
                   <li class="pt-2">
-                    Port {createdRoute.spec.port.targetPort} is reachable with route
+                    Port {createdRoute.spec.port?.targetPort} is reachable with route
                     <Link on:click="{() => openRoute(createdRoute)}">{createdRoute.metadata.name}</Link>
                   </li>
                 {/each}
