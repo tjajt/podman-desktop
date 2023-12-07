@@ -657,6 +657,46 @@ export class KubernetesClient {
     }
   }
 
+  async restartPod(name: string): Promise<void> {
+    let telemetryOptions = {};
+    try {
+      const ns = this.currentNamespace;
+      const connected = await this.checkConnection();
+      if (ns && connected) {
+        const pod = await this.readNamespacedPod(name, ns);
+        if (pod?.metadata) {
+          const coreApi = this.kubeConfig.makeApiClient(CoreV1Api);
+          // To restart pod we need to delete existed pod and create the new one
+          await coreApi.deleteNamespacedPod(name, ns);
+
+          pod.metadata.resourceVersion = undefined;
+          pod.metadata.creationTimestamp = new Date();
+
+          // Wait the pod to be successfully deleted
+          // eslint-disable-next-line no-constant-condition
+          while (true) {
+            try {
+              await coreApi.readNamespacedPod(name, ns);
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            } catch (error: any) {
+              if (error.response.statusCode === 404) {
+                break; // Pod deleted
+              }
+              throw error;
+            }
+          }
+
+          await coreApi.createNamespacedPod(ns, pod);
+        }
+      }
+    } catch (error) {
+      telemetryOptions = { error: error };
+      throw this.wrapK8sClientError(error);
+    } finally {
+      this.telemetry.track('kubernetesRestartPod', telemetryOptions);
+    }
+  }
+
   async deleteDeployment(name: string): Promise<void> {
     let telemetryOptions = {};
     try {

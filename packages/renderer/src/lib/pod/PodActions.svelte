@@ -75,6 +75,17 @@ async function restartPod(podInfoUI: PodInfoUI) {
   }
 }
 
+async function restartKubernetesPod(podInfoUI: PodInfoUI) {
+  inProgressCallback(true, 'RESTARTING');
+  try {
+    await window.restartKubernetesPod(podInfoUI.name);
+  } catch (error) {
+    errorCallback(String(error));
+  } finally {
+    inProgressCallback(false);
+  }
+}
+
 async function stopPod(podInfoUI: PodInfoUI) {
   inProgressCallback(true, 'STOPPING');
   try {
@@ -193,6 +204,13 @@ if (dropdownMenu) {
     <ListItemButtonIcon
       title="Restart Pod"
       onClick="{() => restartPod(pod)}"
+      menu="{dropdownMenu}"
+      detailed="{detailed}"
+      icon="{faArrowsRotate}" />
+  {:else if pod.kind === 'kubernetes'}
+    <ListItemButtonIcon
+      title="Restart Pod"
+      onClick="{() => restartKubernetesPod(pod)}"
       menu="{dropdownMenu}"
       detailed="{detailed}"
       icon="{faArrowsRotate}" />

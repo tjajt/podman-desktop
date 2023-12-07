@@ -634,3 +634,23 @@ test('Expect deleteService to be called if there is an active connection', async
   await client.deleteService('name');
   expect(deleteServiceMock).toBeCalled();
 });
+
+test('Expect pod to be restarted', async () => {
+  const client = new TestKubernetesClient({} as ApiSenderType, configurationRegistry, fileSystemMonitoring, telemetry);
+  client.setCurrentNamespace('default');
+  client.readNamespacedPod = vi.fn().mockResolvedValue({ metadata: {} });
+  const deleteNamespacedPodMock = vi.fn();
+  const createNamespacedPodMock = vi.fn();
+
+  makeApiClientMock.mockReturnValue({
+    getCode: () => Promise.resolve({ body: { gitVersion: 'v1.20.0' } }),
+    // eslint-disable-next-line prefer-promise-reject-errors
+    readNamespacedPod: () => Promise.reject({ response: { statusCode: 404 } }),
+    deleteNamespacedPod: deleteNamespacedPodMock,
+    createNamespacedPod: createNamespacedPodMock,
+  });
+
+  await client.restartPod('dummy');
+  expect(deleteNamespacedPodMock).toBeCalled();
+  expect(createNamespacedPodMock).toBeCalled();
+});
