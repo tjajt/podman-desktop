@@ -335,7 +335,14 @@ function computeInterval(): number {
       <NoContainerEngineEmptyScreen />
     {:else if $filtered.length === 0}
       {#if searchTerm}
-        <FilteredEmptyScreen icon="{PodIcon}" kind="pods" bind:searchTerm="{searchTerm}" />
+        <FilteredEmptyScreen
+          icon="{PodIcon}"
+          kind="pods"
+          bind:searchTerm="{searchTerm}"
+          on:resetFilter="{e => {
+            searchTerm = podUtils.filterResetSearchTerm(searchTerm);
+            e.preventDefault();
+          }}" />
       {:else}
         <PodEmptyScreen />
       {/if}

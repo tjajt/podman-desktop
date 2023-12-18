@@ -702,7 +702,10 @@ function setStoppedFilter() {
         <FilteredEmptyScreen
           icon="{ContainerIcon}"
           kind="containers"
-          on:resetFilter="{() => (searchTerm = containerUtils.filterResetSearchTerm(searchTerm))}"
+          on:resetFilter="{e => {
+            searchTerm = containerUtils.filterResetSearchTerm(searchTerm);
+            e.preventDefault();
+          }}"
           searchTerm="{containerUtils.filterSearchTerm(searchTerm)}" />
       {:else}
         <ContainerEmptyScreen
