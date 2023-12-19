@@ -654,3 +654,22 @@ test('Expect pod to be restarted', async () => {
   expect(deleteNamespacedPodMock).toBeCalled();
   expect(createNamespacedPodMock).toBeCalled();
 });
+
+test('Expect pod fails to restart', async () => {
+  const client = new TestKubernetesClient({} as ApiSenderType, configurationRegistry, fileSystemMonitoring, telemetry);
+  client.setCurrentNamespace('default');
+  client.readNamespacedPod = vi.fn().mockResolvedValue({ metadata: {} });
+  const deleteNamespacedPodMock = vi.fn();
+  const createNamespacedPodMock = vi.fn();
+
+  makeApiClientMock.mockReturnValue({
+    getCode: () => Promise.resolve({ body: { gitVersion: 'v1.20.0' } }),
+    readNamespacedPod: () => Promise.resolve(),
+    deleteNamespacedPod: deleteNamespacedPodMock,
+    createNamespacedPod: createNamespacedPodMock,
+  });
+
+  await expect(client.restartPod('dummy', 1000)).rejects.toThrow(
+    new Error('Request timed out while deleting the Pod.'),
+  );
+});

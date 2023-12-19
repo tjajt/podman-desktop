@@ -657,7 +657,7 @@ export class KubernetesClient {
     }
   }
 
-  async restartPod(name: string): Promise<void> {
+  async restartPod(name: string, timeoutMs: number = 60000): Promise<void> {
     let telemetryOptions = {};
     try {
       const ns = this.currentNamespace;
@@ -673,18 +673,7 @@ export class KubernetesClient {
           pod.metadata.creationTimestamp = new Date();
 
           // Wait the pod to be successfully deleted
-          // eslint-disable-next-line no-constant-condition
-          while (true) {
-            try {
-              await coreApi.readNamespacedPod(name, ns);
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            } catch (error: any) {
-              if (error.response.statusCode === 404) {
-                break; // Pod deleted
-              }
-              throw error;
-            }
-          }
+          await this.waitForPodDeletion(coreApi, name, ns, timeoutMs);
 
           await coreApi.createNamespacedPod(ns, pod);
         }
@@ -695,6 +684,27 @@ export class KubernetesClient {
     } finally {
       this.telemetry.track('kubernetesRestartPod', telemetryOptions);
     }
+  }
+
+  private async waitForPodDeletion(coreApi: CoreV1Api, name: string, ns: string, timeoutMs: number) {
+    try {
+      await coreApi.readNamespacedPod(name, ns);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
+      if (error.response.statusCode === 404) {
+        return; // Pod deleted
+      }
+      throw error;
+    }
+
+    if (timeoutMs <= 0) {
+      throw new Error('Request timed out while deleting the Pod.');
+    }
+
+    // Wait 1 second before next try
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    await this.waitForPodDeletion(coreApi, name, ns, timeoutMs - 1000);
   }
 
   async deleteDeployment(name: string): Promise<void> {
