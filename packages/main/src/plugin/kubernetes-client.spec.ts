@@ -1059,7 +1059,13 @@ test('refreshInformer should stop and start again the informer', async () => {
 });
 
 test('Expect pod to be restarted', async () => {
-  const client = new TestKubernetesClient({} as ApiSenderType, configurationRegistry, fileSystemMonitoring, telemetry);
+  const client = new TestKubernetesClient(
+    apiSender,
+    configurationRegistry,
+    fileSystemMonitoring,
+    informerManager,
+    telemetry,
+  );
   client.setCurrentNamespace('default');
   client.readNamespacedPod = vi.fn().mockResolvedValue({ metadata: {} });
   const deleteNamespacedPodMock = vi.fn();
@@ -1079,7 +1085,13 @@ test('Expect pod to be restarted', async () => {
 });
 
 test('Expect pod fails to restart', async () => {
-  const client = new TestKubernetesClient({} as ApiSenderType, configurationRegistry, fileSystemMonitoring, telemetry);
+  const client = new TestKubernetesClient(
+    apiSender,
+    configurationRegistry,
+    fileSystemMonitoring,
+    informerManager,
+    telemetry,
+  );
   client.setCurrentNamespace('default');
   client.readNamespacedPod = vi.fn().mockResolvedValue({ metadata: {} });
   const deleteNamespacedPodMock = vi.fn();
