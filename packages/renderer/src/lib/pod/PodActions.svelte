@@ -15,7 +15,7 @@ import DropdownMenu from '../ui/DropdownMenu.svelte';
 import FlatMenu from '../ui/FlatMenu.svelte';
 import type { Menu } from '../../../../main/src/plugin/menu-registry';
 import ContributionActions from '/@/lib/actions/ContributionActions.svelte';
-import { onMount } from 'svelte';
+import { createEventDispatcher, onMount } from 'svelte';
 import { MenuContext } from '../../../../main/src/plugin/menu-registry';
 import { ContainerUtils } from '../container/container-utils';
 
@@ -23,8 +23,7 @@ export let pod: PodInfoUI;
 export let dropdownMenu = false;
 export let detailed = false;
 
-export let inProgressCallback: (inProgress: boolean, state?: string) => void = () => {};
-export let errorCallback: (erroMessage: string) => void = () => {};
+const dispatch = createEventDispatcher<{ update: PodInfoUI }>();
 
 let contributions: Menu[] = [];
 onMount(async () => {
@@ -53,62 +52,74 @@ onMount(async () => {
   });
 });
 
-async function startPod(podInfoUI: PodInfoUI) {
-  inProgressCallback(true, 'STARTING');
+function inProgress(inProgress: boolean, state?: string): void {
+  pod.actionInProgress = inProgress;
+  // reset error when starting task
+  if (inProgress) {
+    pod.actionError = '';
+  }
+  if (state) {
+    pod.status = state;
+  }
+
+  dispatch('update', pod);
+}
+
+function handleError(errorMessage: string): void {
+  pod.actionError = errorMessage;
+  pod.status = 'ERROR';
+  dispatch('update', pod);
+}
+
+async function startPod() {
+  inProgress(true, 'STARTING');
   try {
-    await window.startPod(podInfoUI.engineId, podInfoUI.id);
+    await window.startPod(pod.engineId, pod.id);
   } catch (error) {
-    errorCallback(String(error));
+    handleError(String(error));
   } finally {
-    inProgressCallback(false, 'RUNNING');
+    inProgress(false);
   }
 }
 
-async function restartPod(podInfoUI: PodInfoUI) {
-  inProgressCallback(true, 'RESTARTING');
-  try {
-    await window.restartPod(podInfoUI.engineId, podInfoUI.id);
-  } catch (error) {
-    errorCallback(String(error));
-  } finally {
-    inProgressCallback(false);
-  }
-}
-
-async function restartKubernetesPod(podInfoUI: PodInfoUI) {
-  inProgressCallback(true, 'RESTARTING');
-  try {
-    await window.restartKubernetesPod(podInfoUI.name);
-  } catch (error) {
-    errorCallback(String(error));
-  } finally {
-    inProgressCallback(false);
-  }
-}
-
-async function stopPod(podInfoUI: PodInfoUI) {
-  inProgressCallback(true, 'STOPPING');
-  try {
-    await window.stopPod(podInfoUI.engineId, podInfoUI.id);
-  } catch (error) {
-    errorCallback(String(error));
-  } finally {
-    inProgressCallback(false, 'STOPPED');
-  }
-}
-
-async function deletePod(podInfoUI: PodInfoUI): Promise<void> {
-  inProgressCallback(true, 'DELETING');
+async function restartPod() {
+  inProgress(false, 'RESTARTING');
   try {
     if (pod.kind === 'podman') {
-      await window.removePod(podInfoUI.engineId, podInfoUI.id);
+      await window.restartPod(pod.engineId, pod.id);
     } else {
-      await window.kubernetesDeletePod(podInfoUI.name);
+      await window.restartKubernetesPod(pod.name);
     }
   } catch (error) {
-    errorCallback(String(error));
+    handleError(String(error));
   } finally {
-    inProgressCallback(false);
+    inProgress(false);
+  }
+}
+
+async function stopPod() {
+  inProgress(false, 'STOPPING');
+  try {
+    await window.stopPod(pod.engineId, pod.id);
+  } catch (error) {
+    handleError(String(error));
+  } finally {
+    inProgress(false);
+  }
+}
+
+async function deletePod(): Promise<void> {
+  inProgress(false, 'DELETING');
+  try {
+    if (pod.kind === 'podman') {
+      await window.removePod(pod.engineId, pod.id);
+    } else {
+      await window.kubernetesDeletePod(pod.name);
+    }
+  } catch (error) {
+    handleError(String(error));
+  } finally {
+    inProgress(false);
   }
 }
 
@@ -132,7 +143,7 @@ if (dropdownMenu) {
 {#if pod.kind === 'podman'}
   <ListItemButtonIcon
     title="Start Pod"
-    onClick="{() => startPod(pod)}"
+    onClick="{() => startPod()}"
     hidden="{pod.status === 'RUNNING' || pod.status === 'STOPPING'}"
     detailed="{detailed}"
     inProgress="{pod.actionInProgress && pod.status === 'STARTING'}"
@@ -140,7 +151,7 @@ if (dropdownMenu) {
     iconOffset="pl-[0.15rem]" />
   <ListItemButtonIcon
     title="Stop Pod"
-    onClick="{() => stopPod(pod)}"
+    onClick="{() => stopPod()}"
     hidden="{!(pod.status === 'RUNNING' || pod.status === 'STOPPING')}"
     detailed="{detailed}"
     inProgress="{pod.actionInProgress && pod.status === 'STOPPING'}"
@@ -148,7 +159,7 @@ if (dropdownMenu) {
 {/if}
 <ListItemButtonIcon
   title="Delete Pod"
-  onClick="{() => deletePod(pod)}"
+  onClick="{() => deletePod()}"
   icon="{faTrash}"
   detailed="{detailed}"
   inProgress="{pod.actionInProgress && pod.status === 'DELETING'}" />
@@ -201,24 +212,18 @@ if (dropdownMenu) {
         {/each}
       </DropdownMenu>
     {/if}
-    <ListItemButtonIcon
-      title="Restart Pod"
-      onClick="{() => restartPod(pod)}"
-      menu="{dropdownMenu}"
-      detailed="{detailed}"
-      icon="{faArrowsRotate}" />
-  {:else if pod.kind === 'kubernetes'}
-    <ListItemButtonIcon
-      title="Restart Pod"
-      onClick="{() => restartKubernetesPod(pod)}"
-      menu="{dropdownMenu}"
-      detailed="{detailed}"
-      icon="{faArrowsRotate}" />
   {/if}
+  <ListItemButtonIcon
+    title="Restart Pod"
+    onClick="{() => restartPod()}"
+    menu="{dropdownMenu}"
+    detailed="{detailed}"
+    icon="{faArrowsRotate}" />
   <ContributionActions
     args="{[pod]}"
     contextPrefix="podItem"
     dropdownMenu="{dropdownMenu}"
     contributions="{contributions}"
-    onError="{errorCallback}" />
+    detailed="{detailed}"
+    onError="{handleError}" />
 </svelte:component>
